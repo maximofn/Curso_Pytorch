@@ -1,2 +1,2 @@
-# Curso_Pytorch
+# Curso Pytorch
 Curso sobre Pytorch

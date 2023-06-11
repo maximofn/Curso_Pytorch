@@ -1,4 +1,4 @@
-mamba create -y -n cursopytorch -c anaconda -c conda-forge ipykernel numpy matplotlib gitpython pandas scikit-image scikit-learn=1.1 fastprogress opencv
+mamba create -y -n cursopytorch -c anaconda -c conda-forge -c huggingface ipykernel numpy matplotlib gitpython pandas scikit-image scikit-learn=1.1 fastprogress opencv transformers
 conda activate cursopytorch
 mamba install -y pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 
@@ -11,3 +11,4 @@ mamba install -y pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c 
 mamba install -y -c conda-forge gitpython
 mamba install -y -c anaconda pandas
 mamba install -y -c anaconda scikit-image
+mamba install -y -c conda-forge transformers

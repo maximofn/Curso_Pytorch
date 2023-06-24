@@ -55,15 +55,24 @@ class CustomBertModel(BertModel):
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = CustomBertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
 
-input_ids = tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)
+sentence = "I gave the dog a bone because it was hungry"
+# sentence = "I gave the dog a bone because it was old"
+input_ids = tokenizer.encode(sentence, add_special_tokens=True)
 input_ids_tensor = torch.tensor([input_ids])
+
+tokens = tokenizer.convert_ids_to_tokens(input_ids)
 
 with torch.no_grad():
     outputs, token_embeddings, positional_encodings, embeddings_with_positional_encoding = model(input_ids_tensor)
 
-print("Token embeddings:")
+print(f"Frase de entrada: {sentence}")
+print(f"Tokens: {tokens}")
+print(f"IDs de los tokens: {input_ids}")
+for i, token in enumerate(tokens):
+    print(f"El token \"{token}\" es el número {i} y tiene el ID {input_ids[i]}")
+print(f"\nToken embeddings: {token_embeddings.shape}")
 print(token_embeddings)
-print("\nPositional encodings:")
+print(f"\nPositional encodings: {positional_encodings.shape}")
 print(positional_encodings)
-print("\nEmbeddings with positional encoding:")
+print(f"\nEmbeddings with positional encoding: {embeddings_with_positional_encoding.shape}")
 print(embeddings_with_positional_encoding)

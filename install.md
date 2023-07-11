@@ -12,3 +12,4 @@ mamba install -y -c conda-forge gitpython
 mamba install -y -c anaconda pandas
 mamba install -y -c anaconda scikit-image
 mamba install -y -c conda-forge transformers
+mamba install -y -c huggingface -c conda-forge datasets

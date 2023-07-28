@@ -4,7 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import tiktoken
 
-path = "data/opus100_croped_10"
+path = "data/opus100_croped"
 opus100 = load_from_disk(path)
 
 class Opus100Dataset(Dataset):
@@ -48,19 +48,7 @@ train_dataset = Opus100Dataset(opus100["train"], "en", "es", encoder.encode, sta
 validation_dataset = Opus100Dataset(opus100["validation"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
 test_dataset = Opus100Dataset(opus100["test"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
 
-# ! Quitar
-import numpy as np
-def subsample_dataset(dataset, new_size):
-    indices = np.random.choice(len(dataset), new_size, replace=False)
-    indices = indices.tolist()  # Convert numpy.int64 indices to native int
-    return torch.utils.data.Subset(dataset, indices)
-train_dataset = subsample_dataset(train_dataset, 1000)
-validation_dataset = subsample_dataset(validation_dataset, 100)
-test_dataset = subsample_dataset(test_dataset, 100)
-print(f"train_dataset: {len(train_dataset)}, validation_dataset: {len(validation_dataset)}, test_dataset: {len(test_dataset)}")
-# ! Quitar
-
-BS = 1
+BS = 256
 train_dataloader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
 validation_dataloader = DataLoader(validation_dataset, batch_size=BS, shuffle=False)
 test_dataloader = DataLoader(test_dataset, batch_size=BS, shuffle=False)
@@ -313,9 +301,36 @@ transformer = Transformer(vocab_size, dim_embedding, max_sequence_len, heads, Nx
 
 mask = create_mask(max_secuence_length)
 
-loss_function = nn.CrossEntropyLoss(ignore_index=padding_token[0])
+class LabelSmoothingLoss(nn.Module):
+    def __init__(self, classes, smoothing=0.1, dim=-1, ignore_index=-100):
+        super(LabelSmoothingLoss, self).__init__()
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.classes = classes
+        self.dim = dim
+        self.ignore_index = ignore_index
 
-optimizer = torch.optim.Adam(transformer.parameters(), lr=1e-4)
+    def forward(self, pred, target):
+        pred = pred.log_softmax(dim=self.dim)
+        with torch.no_grad():
+            true_dist = torch.zeros_like(pred)
+            true_dist.fill_(self.smoothing / (self.classes - 1))
+            true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+            mask = (target == self.ignore_index).unsqueeze(1).expand_as(true_dist)
+            if mask.any():
+                true_dist[mask] = 0
+        return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
+
+loss_function = LabelSmoothingLoss(classes=vocab_size, smoothing=0.1, ignore_index=padding_token[0])
+
+optimizer = torch.optim.Adam(transformer.parameters(), lr=1e-4, betas=(0.9, 0.98), eps=1e-9)
+
+def calculate_lr(step_num, dim_embeding_model=512, warmup_steps=4000):
+    step_num += 1e-7 # Avoid division by zero
+    return (dim_embeding_model**-0.5) * min(step_num**-0.5, step_num*(warmup_steps**-1.5))
+
+lr_lambda = lambda step: calculate_lr(step, dim_embeding_model=dim_embedding)
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 def train_loop(dataloader, model, loss_fn, optimizer, device, mask):
     size = len(dataloader.dataset)
@@ -330,6 +345,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
         if batch % 100 == 0:
             loss, current = loss.item(), batch * len(src)
@@ -351,6 +367,7 @@ def validation_loop(dataloader, model, loss_fn, device, mask):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 transformer = transformer.to(device)
+epochs = 100000
 for t in range(10):
     print(f"Epoch {t+1}\n-------------------------------")
     train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask)

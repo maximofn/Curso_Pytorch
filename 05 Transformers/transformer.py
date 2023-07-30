@@ -3,6 +3,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import tiktoken
+import numpy as np
+import time
+import os
 
 path = "data/opus100_croped"
 opus100 = load_from_disk(path)
@@ -48,7 +51,18 @@ train_dataset = Opus100Dataset(opus100["train"], "en", "es", encoder.encode, sta
 validation_dataset = Opus100Dataset(opus100["validation"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
 test_dataset = Opus100Dataset(opus100["test"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
 
-BS = 256
+# import numpy as np
+# # ! Quitar
+# def subsample_dataset(dataset, new_size):
+#     indices = np.random.choice(len(dataset), new_size, replace=False)
+#     indices = indices.tolist()  # Convert numpy.int64 indices to native int
+#     return torch.utils.data.Subset(dataset, indices)
+# new_size = 500  # Elige el tamaño que prefieras
+# train_dataset = subsample_dataset(train_dataset, new_size)
+# validation_dataset = subsample_dataset(validation_dataset, new_size)
+# test_dataset = subsample_dataset(test_dataset, new_size)
+
+BS = 230
 train_dataloader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
 validation_dataloader = DataLoader(validation_dataset, batch_size=BS, shuffle=False)
 test_dataloader = DataLoader(test_dataset, batch_size=BS, shuffle=False)
@@ -287,10 +301,6 @@ class Transformer(nn.Module):
         decoder_output = self.decoder(target, encoder_output, mask)
         return decoder_output
 
-def create_mask(sequence_len):
-    mask = torch.tril(torch.ones((sequence_len, sequence_len)))
-    return mask
-
 vocab_size = encoder.n_vocab
 dim_embedding = 512
 max_sequence_len = 104
@@ -298,6 +308,18 @@ heads = 8
 Nx = 6
 prob_dropout = 0.1
 transformer = Transformer(vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout)
+
+if torch.cuda.device_count() > 1:
+    print(f"Let's use {torch.cuda.device_count()} GPUs!")
+    transformer = nn.DataParallel(transformer)
+
+    def create_mask(sequence_len):
+        mask = torch.tril(torch.ones((2*sequence_len, sequence_len)))
+        return mask
+else:
+    def create_mask(sequence_len):
+        mask = torch.tril(torch.ones((sequence_len, sequence_len)))
+        return mask
 
 mask = create_mask(max_secuence_length)
 
@@ -332,8 +354,11 @@ def calculate_lr(step_num, dim_embeding_model=512, warmup_steps=4000):
 lr_lambda = lambda step: calculate_lr(step, dim_embeding_model=dim_embedding)
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
-def train_loop(dataloader, model, loss_fn, optimizer, device, mask):
+def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
     size = len(dataloader.dataset)
+    num_batches = len(dataloader)
+    mean_loss = 0
+    lr_list = []
     for batch, (src, trg) in enumerate(dataloader):
         src = src.to(device)
         trg = trg.to(device)
@@ -341,19 +366,24 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask):
 
         pred = model(src, trg, mask)
         loss = loss_fn(pred.transpose(1, 2), trg)
+        mean_loss += loss.item()
+
+        lr = optimizer.param_groups[0]['lr']
+        lr_list.append(lr)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         scheduler.step()
 
-        if batch % 100 == 0:
+        if batch % 10000 == 0:
             loss, current = loss.item(), batch * len(src)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {lr:>10f}")
+    return mean_loss/num_batches, np.array(lr_list)
 
 def validation_loop(dataloader, model, loss_fn, device, mask):
     num_batches = len(dataloader)
-    test_loss = 0
+    validation_loss = 0
     with torch.no_grad():
         for src, trg in dataloader:
             src = src.to(device)
@@ -361,15 +391,70 @@ def validation_loop(dataloader, model, loss_fn, device, mask):
             mask = mask.to(device)
 
             pred = model(src, trg, mask)
-            test_loss += loss_fn(pred.transpose(1, 2), trg).item()
-    test_loss /= num_batches
-    print(f"Avg loss: {test_loss:>8f} \n")
+            validation_loss += loss_fn(pred.transpose(1, 2), trg).item()
+    validation_loss /= num_batches
+    print(f"Avg validation loss: {validation_loss:>8f}")
+    return validation_loss
+
+def elapsed_time(t0):
+    t = time.time() - t0  # tiempo transcurrido en segundos
+
+    # Convertir el tiempo a días, horas, minutos y segundos
+    days, t = divmod(t, 86400)  # 86400 segundos en un día
+    hours, t = divmod(t, 3600)  # 3600 segundos en una hora
+    minutes, seconds = divmod(t, 60)  # 60 segundos en un minuto
+
+    return int(days), int(hours), int(minutes), int(seconds)
+
+def elapsed_seconds(days, hours, minutes, seconds):
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 transformer = transformer.to(device)
+
 epochs = 100000
-for t in range(10):
-    print(f"Epoch {t+1}\n-------------------------------")
-    train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask)
-    validation_loop(validation_dataloader, transformer, loss_function, device, mask)
+
+train_loss_list = []
+train_lr_list = []
+validation_loss_list = []
+train_loss_list = np.array(train_loss_list)
+train_lr_list = np.array(train_lr_list)
+validation_loss_list = np.array(validation_loss_list)
+
+best_loss = 1000000
+
+t0 = time.time()
+# max_seconds = 60*60*11 + 60*30 # 11 horas y 30 minutos
+max_seconds = 60*60*24*5 # 5 días
+
+model_path = f"model_{BS}"
+
+for t in range(epochs):
+    days, hours, minutes, seconds = elapsed_time(t0)
+    print(f"\nEpoch {t+1}\n-------------------------------, {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
+    train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, t+1)
+    validation_loss = validation_loop(validation_dataloader, transformer, loss_function, device, mask)
+
+    train_loss_list = np.append(train_loss_list, train_loss)
+    train_lr_list = np.append(train_lr_list, train_lr)
+    validation_loss_list = np.append(validation_loss_list, validation_loss)
+
+    if validation_loss < best_loss:
+        best_loss = validation_loss
+        if not os.path.exists(model_path):
+            os.makedirs(model_path)
+        torch.save(transformer.state_dict(), f'{model_path}/transformer.pth')
+        print(f"Best model saved with loss {best_loss} at epoch {t+1} in time {time.time()-t0} with lr {train_lr[-1]}")
+
+    days, hours, minutes, seconds = elapsed_time(t0)
+    train_elapsed_seconds = elapsed_seconds(days, hours, minutes, seconds)
+    if train_elapsed_seconds > max_seconds:
+        print("Time out!")
+        break
+
+np.save(f'{model_path}/train_loss_list.npy', train_loss_list)
+np.save(f'{model_path}/train_lr_list.npy', train_lr_list)
+np.save(f'{model_path}/validation_loss_list.npy', validation_loss_list)
+
 print("Done!")

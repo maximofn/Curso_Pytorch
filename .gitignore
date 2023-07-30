@@ -19,3 +19,5 @@ Apuntes
 04 Redes convolucionales/data
 05 Transformers/info.ipynb
 05 Transformers/data
+05 Transformers/**/*.pth
+05 Transformers/**/*.npy

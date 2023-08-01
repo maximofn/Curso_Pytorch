@@ -10,10 +10,12 @@ import os
 path = "data/opus100_croped"
 opus100 = load_from_disk(path)
 
-BS = 256
+BS = 512
 STEP0 = 0
 EPOCH0 = 0
-model_path = f"model_{BS}"
+SUBSET = False
+MODEL_PATH = f"model"
+EPOCHS = 100000
 
 class Opus100Dataset(Dataset):
     def __init__(self, dataset, source_language, target_language, tokenizer, start_token, end_token, padding_token, max_length):
@@ -56,16 +58,15 @@ train_dataset = Opus100Dataset(opus100["train"], "en", "es", encoder.encode, sta
 validation_dataset = Opus100Dataset(opus100["validation"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
 test_dataset = Opus100Dataset(opus100["test"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
 
-# import numpy as np
-# # ! Quitar
-# def subsample_dataset(dataset, new_size):
-#     indices = np.random.choice(len(dataset), new_size, replace=False)
-#     indices = indices.tolist()  # Convert numpy.int64 indices to native int
-#     return torch.utils.data.Subset(dataset, indices)
-# new_size = 500  # Elige el tamaño que prefieras
-# train_dataset = subsample_dataset(train_dataset, new_size)
-# validation_dataset = subsample_dataset(validation_dataset, new_size)
-# test_dataset = subsample_dataset(test_dataset, new_size)
+if SUBSET:
+    def subsample_dataset(dataset, new_size):
+        indices = np.random.choice(len(dataset), new_size, replace=False)
+        indices = indices.tolist()  # Convert numpy.int64 indices to native int
+        return torch.utils.data.Subset(dataset, indices)
+    new_size = 500  # Elige el tamaño que prefieras
+    train_dataset = subsample_dataset(train_dataset, new_size)
+    validation_dataset = subsample_dataset(validation_dataset, new_size)
+    test_dataset = subsample_dataset(test_dataset, new_size)
 
 train_dataloader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
 validation_dataloader = DataLoader(validation_dataset, batch_size=BS, shuffle=False)
@@ -408,9 +409,9 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
         optimizer.step()
         scheduler.step()
 
-        if batch % 1000 == 0:
+        if batch % 100 == 0:
             loss, current = loss.item(), batch * len(src)
-            print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {lr:>10f}")
+            print(f"loss: {loss:0.10f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {lr}")
     return mean_loss/num_batches, np.array(lr_list)
 
 def validation_loop(dataloader, model, loss_fn, device, mask):
@@ -446,10 +447,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 transformer = transformer.to(device)
 
 if EPOCH0 != 0 or STEP0 != 0:
-    transformer.load_state_dict(torch.load(f'{model_path}/transformer_{EPOCH0}_{STEP0}.pth'))
-    print(f"Model loaded from {model_path}/transformer_{EPOCH0}_{STEP0}.pth")
-
-epochs = 100000
+    transformer.load_state_dict(torch.load(f'{MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth'))
+    print(f"Model loaded from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
 
 train_loss_list = []
 train_lr_list = []
@@ -464,7 +463,7 @@ t0 = time.time()
 # max_seconds = 60*60*11 + 60*30 # 11 horas y 30 minutos
 max_seconds = 60*60*24*5 # 5 días
 
-for epoch in range(STEP0, epochs, 1):
+for epoch in range(STEP0, EPOCHS, 1):
     days, hours, minutes, seconds = elapsed_time(t0)
     print(f"\nEpoch {epoch}\n-------------------------------, {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
     train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, epoch)
@@ -476,9 +475,9 @@ for epoch in range(STEP0, epochs, 1):
 
     if validation_loss < best_loss:
         best_loss = validation_loss
-        if not os.path.exists(model_path):
-            os.makedirs(model_path)
-        torch.save(transformer.state_dict(), f'{model_path}/transformer_{epoch}_{actual_step.get_step()}.pth')
+        if not os.path.exists(MODEL_PATH):
+            os.makedirs(MODEL_PATH)
+        torch.save(transformer.state_dict(), f'{MODEL_PATH}/transformer_{epoch}_{actual_step.get_step()}.pth')
         print(f"Best model saved with loss {best_loss} at epoch {epoch}, in {time.time()-t0} ms, with lr {train_lr[-1]} and in step {actual_step.get_step()}")
 
     days, hours, minutes, seconds = elapsed_time(t0)
@@ -487,8 +486,8 @@ for epoch in range(STEP0, epochs, 1):
     #     print("Time out!")
     #     break
 
-np.save(f'{model_path}/train_loss_list.npy', train_loss_list)
-np.save(f'{model_path}/train_lr_list.npy', train_lr_list)
-np.save(f'{model_path}/validation_loss_list.npy', validation_loss_list)
+np.save(f'{MODEL_PATH}/train_loss_list.npy', train_loss_list)
+np.save(f'{MODEL_PATH}/train_lr_list.npy', train_lr_list)
+np.save(f'{MODEL_PATH}/validation_loss_list.npy', validation_loss_list)
 
 print("Done!")

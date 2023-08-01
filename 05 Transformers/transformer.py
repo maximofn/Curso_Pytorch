@@ -7,7 +7,7 @@ import numpy as np
 import time
 import os
 
-path = "data/opus100_croped"
+path = "data/opus100_croped_10"
 opus100 = load_from_disk(path)
 
 BS = 512

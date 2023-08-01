@@ -10,6 +10,11 @@ import os
 path = "data/opus100_croped"
 opus100 = load_from_disk(path)
 
+BS = 256
+STEP0 = 0
+EPOCH0 = 0
+model_path = f"model_{BS}"
+
 class Opus100Dataset(Dataset):
     def __init__(self, dataset, source_language, target_language, tokenizer, start_token, end_token, padding_token, max_length):
         self.dataset = dataset
@@ -62,7 +67,6 @@ test_dataset = Opus100Dataset(opus100["test"], "en", "es", encoder.encode, start
 # validation_dataset = subsample_dataset(validation_dataset, new_size)
 # test_dataset = subsample_dataset(test_dataset, new_size)
 
-BS = 230
 train_dataloader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
 validation_dataloader = DataLoader(validation_dataset, batch_size=BS, shuffle=False)
 test_dataloader = DataLoader(test_dataset, batch_size=BS, shuffle=False)
@@ -347,9 +351,36 @@ loss_function = LabelSmoothingLoss(classes=vocab_size, smoothing=0.1, ignore_ind
 
 optimizer = torch.optim.Adam(transformer.parameters(), lr=1e-4, betas=(0.9, 0.98), eps=1e-9)
 
+class Step():
+    def __init__(self):
+        self.step = 0
+    
+    def set_step(self, st):
+        self.step = st
+    
+    def get_step(self):
+        return int(self.step)
+
+class LearningRate():
+    def __init__(self):
+        self.lr = 0
+    
+    def set_lr(self, l_r_):
+        self.lr = l_r_
+    
+    def get_lr(self):
+        return self.lr
+
+actual_step = Step()
+actual_lr = LearningRate()
+
 def calculate_lr(step_num, dim_embeding_model=512, warmup_steps=4000):
     step_num += 1e-7 # Avoid division by zero
-    return (dim_embeding_model**-0.5) * min(step_num**-0.5, step_num*(warmup_steps**-1.5))
+    step_num += STEP0
+    actual_step.set_step(step_num)
+    lr = (dim_embeding_model**-0.5) * min(step_num**-0.5, step_num*(warmup_steps**-1.5))
+    actual_lr.set_lr(lr)
+    return lr
 
 lr_lambda = lambda step: calculate_lr(step, dim_embeding_model=dim_embedding)
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
@@ -368,7 +399,8 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
         loss = loss_fn(pred.transpose(1, 2), trg)
         mean_loss += loss.item()
 
-        lr = optimizer.param_groups[0]['lr']
+        # lr = optimizer.param_groups[0]['lr']
+        lr = actual_lr.get_lr()
         lr_list.append(lr)
 
         optimizer.zero_grad()
@@ -376,7 +408,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
         optimizer.step()
         scheduler.step()
 
-        if batch % 10000 == 0:
+        if batch % 1000 == 0:
             loss, current = loss.item(), batch * len(src)
             print(f"loss: {loss:>7f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {lr:>10f}")
     return mean_loss/num_batches, np.array(lr_list)
@@ -413,6 +445,10 @@ def elapsed_seconds(days, hours, minutes, seconds):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 transformer = transformer.to(device)
 
+if EPOCH0 != 0 or STEP0 != 0:
+    transformer.load_state_dict(torch.load(f'{model_path}/transformer_{EPOCH0}_{STEP0}.pth'))
+    print(f"Model loaded from {model_path}/transformer_{EPOCH0}_{STEP0}.pth")
+
 epochs = 100000
 
 train_loss_list = []
@@ -428,12 +464,10 @@ t0 = time.time()
 # max_seconds = 60*60*11 + 60*30 # 11 horas y 30 minutos
 max_seconds = 60*60*24*5 # 5 días
 
-model_path = f"model_{BS}"
-
-for t in range(epochs):
+for epoch in range(STEP0, epochs, 1):
     days, hours, minutes, seconds = elapsed_time(t0)
-    print(f"\nEpoch {t+1}\n-------------------------------, {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
-    train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, t+1)
+    print(f"\nEpoch {epoch}\n-------------------------------, {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
+    train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, epoch)
     validation_loss = validation_loop(validation_dataloader, transformer, loss_function, device, mask)
 
     train_loss_list = np.append(train_loss_list, train_loss)
@@ -444,14 +478,14 @@ for t in range(epochs):
         best_loss = validation_loss
         if not os.path.exists(model_path):
             os.makedirs(model_path)
-        torch.save(transformer.state_dict(), f'{model_path}/transformer.pth')
-        print(f"Best model saved with loss {best_loss} at epoch {t+1} in time {time.time()-t0} with lr {train_lr[-1]}")
+        torch.save(transformer.state_dict(), f'{model_path}/transformer_{epoch}_{actual_step.get_step()}.pth')
+        print(f"Best model saved with loss {best_loss} at epoch {epoch}, in {time.time()-t0} ms, with lr {train_lr[-1]} and in step {actual_step.get_step()}")
 
     days, hours, minutes, seconds = elapsed_time(t0)
     train_elapsed_seconds = elapsed_seconds(days, hours, minutes, seconds)
-    if train_elapsed_seconds > max_seconds:
-        print("Time out!")
-        break
+    # if train_elapsed_seconds > max_seconds:
+    #     print("Time out!")
+    #     break
 
 np.save(f'{model_path}/train_loss_list.npy', train_loss_list)
 np.save(f'{model_path}/train_lr_list.npy', train_lr_list)

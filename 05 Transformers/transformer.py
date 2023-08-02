@@ -11,8 +11,8 @@ path = "data/opus100_croped_10"
 opus100 = load_from_disk(path)
 
 BS = 512
-STEP0 = 0
 EPOCH0 = 0
+STEP0 = 0
 SUBSET = False
 MODEL_PATH = f"model"
 EPOCHS = 100000
@@ -447,6 +447,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 transformer = transformer.to(device)
 
 if EPOCH0 != 0 or STEP0 != 0:
+    print(f"Loading model from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
     transformer.load_state_dict(torch.load(f'{MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth'))
     print(f"Model loaded from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
 
@@ -463,7 +464,7 @@ t0 = time.time()
 # max_seconds = 60*60*11 + 60*30 # 11 horas y 30 minutos
 max_seconds = 60*60*24*5 # 5 días
 
-for epoch in range(STEP0, EPOCHS, 1):
+for epoch in range(EPOCH0, EPOCHS, 1):
     days, hours, minutes, seconds = elapsed_time(t0)
     print(f"\nEpoch {epoch}\n-------------------------------, {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
     train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, epoch)
@@ -477,8 +478,10 @@ for epoch in range(STEP0, EPOCHS, 1):
         best_loss = validation_loss
         if not os.path.exists(MODEL_PATH):
             os.makedirs(MODEL_PATH)
-        torch.save(transformer.state_dict(), f'{MODEL_PATH}/transformer_{epoch}_{actual_step.get_step()}.pth')
-        print(f"Best model saved with loss {best_loss} at epoch {epoch}, in {time.time()-t0} ms, with lr {train_lr[-1]} and in step {actual_step.get_step()}")
+        torch.save(transformer.state_dict(), f'{MODEL_PATH}/transformer_{epoch+1}_{actual_step.get_step()}.pth')
+        torch.save(transformer, f'{MODEL_PATH}/transformer_model_{epoch+1}_{actual_step.get_step()}.pth')
+        torch.jit.save(torch.jit.script(transformer.cpu()), f'{MODEL_PATH}/transformer_jit_{epoch+1}_{actual_step.get_step()}.zip')
+        print(f"Best model saved with loss {best_loss} at epoch {epoch}, in {time.time()-t0} ms, with lr {train_lr[-1]} and in step {actual_step.get_step()} --> {MODEL_PATH}/transformer_{epoch+1}_{actual_step.get_step()}.pth")
 
     days, hours, minutes, seconds = elapsed_time(t0)
     train_elapsed_seconds = elapsed_seconds(days, hours, minutes, seconds)

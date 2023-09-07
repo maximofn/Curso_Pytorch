@@ -15,6 +15,8 @@ mamba install -y -c anaconda -c conda-forge -c fastai -c huggingface ipykernel n
 mamba install -y pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
 
 # Crear el entorno e instalar uno a uno
+conda install -y -c conda-forge mamba
+
 conda create -y -n cursopytorch python=3.8
 
 conda activate cursopytorch
@@ -45,6 +47,6 @@ mamba install -y -c huggingface -c conda-forge datasets
 
 mamba install -y -c anaconda ipywidgets
 
-mamba install -y -c conda-forge tiktoken
+pip install tiktoken
 
 mamba install -y -c conda-forge onnx

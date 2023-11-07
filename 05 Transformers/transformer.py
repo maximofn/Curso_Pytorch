@@ -72,6 +72,7 @@ train_dataloader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
 validation_dataloader = DataLoader(validation_dataset, batch_size=BS, shuffle=False)
 test_dataloader = DataLoader(test_dataset, batch_size=BS, shuffle=False)
 
+# Está bien
 class Embedding(nn.Module):
     def __init__(self, vocab_size, embedding_dim):
         super().__init__()
@@ -83,6 +84,7 @@ class Embedding(nn.Module):
     def forward(self, x):
         return self.embedding(x)
 
+# Modificar y quitar el import math
 class PositionalEncoding(nn.Module):
     def __init__(self, max_sequence_len, embedding_model_dim):
         super().__init__()
@@ -101,6 +103,7 @@ class PositionalEncoding(nn.Module):
         x = x + self.positional_encoding[:,:sequence_len]
         return x
 
+# Modificar y quitar el import math
 class ScaledDotProductAttention(nn.Module):
     def __init__(self, dim_embedding):
         super().__init__()
@@ -116,6 +119,7 @@ class ScaledDotProductAttention(nn.Module):
         output = torch.matmul(attention_matrix, value)
         return output
 
+# Está bien
 class MultiHeadAttention(nn.Module):
     def __init__(self, heads, dim_embedding):
         super().__init__()
@@ -142,6 +146,7 @@ class MultiHeadAttention(nn.Module):
         output = self.attention(concat)
         return output
 
+# Está bien
 class AddAndNorm(nn.Module):
     def __init__(self, dim_embedding):
         super().__init__()
@@ -150,6 +155,7 @@ class AddAndNorm(nn.Module):
     def forward(self, x, sublayer):
         return self.normalization(torch.add(x, sublayer))
 
+# Está bien
 class FeedForward(nn.Module):
     def __init__(self, dim_embedding, increment=4):
         super().__init__()
@@ -163,6 +169,7 @@ class FeedForward(nn.Module):
         x = self.feed_forward(x)
         return x
 
+# Está bien
 class Linear(nn.Module):
     def __init__(self, dim_embedding, vocab_size):
         super().__init__()
@@ -172,6 +179,7 @@ class Linear(nn.Module):
         x = self.linear(x)
         return x
 
+# Está bien
 class Softmax(nn.Module):
     def __init__(self):
         super().__init__()
@@ -181,6 +189,7 @@ class Softmax(nn.Module):
         x = self.softmax(x)
         return x
 
+# Está bien
 class Dropout(torch.nn.Module):
     def __init__(self, p=0.1):
         super().__init__()
@@ -192,6 +201,7 @@ class Dropout(torch.nn.Module):
         else:
             return x
 
+# Está bien
 class EncoderLayer(nn.Module):
     def __init__(self, heads, dim_embedding, prob_dropout=0.1):
         super().__init__()
@@ -211,6 +221,7 @@ class EncoderLayer(nn.Module):
         add_and_norm_2 = self.add_and_norm_2(add_and_norm_1, dropout2)
         return add_and_norm_2
 
+# Está bien
 class Encoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
@@ -221,6 +232,7 @@ class Encoder(nn.Module):
             x = encoder_layer(x)
         return x
 
+# Está bien
 class TransformerEncoder(nn.Module):
     def __init__(self, vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout=0.1):
         super().__init__()
@@ -234,6 +246,7 @@ class TransformerEncoder(nn.Module):
         encoder = self.encoder(positional_encoding)
         return encoder
 
+# Está bien
 class DecoderLayer(nn.Module):
     def __init__(self, heads, dim_embedding, prob_dropout=0.1):
         super().__init__()
@@ -268,6 +281,7 @@ class DecoderLayer(nn.Module):
 
         return add_and_norm_3
 
+# Está bien
 class Decoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
@@ -278,6 +292,7 @@ class Decoder(nn.Module):
             x = decoder_layer(x, encoder_output, mask)
         return x
 
+# Está bien
 class TransformerDecoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, vocab_size, max_sequence_len, prob_dropout=0.1):
         super().__init__()
@@ -295,6 +310,7 @@ class TransformerDecoder(nn.Module):
         x = self.softmax(x)
         return x
 
+# Está bien
 class Transformer(nn.Module):
     def __init__(self, vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout=0.1):
         super().__init__()
@@ -308,12 +324,12 @@ class Transformer(nn.Module):
 
 vocab_size = encoder.n_vocab
 dim_embedding = 512
-max_sequence_len = 104
 heads = 8
 Nx = 6
 prob_dropout = 0.1
-transformer = Transformer(vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout)
+transformer = Transformer(vocab_size, dim_embedding, max_secuence_length, heads, Nx, prob_dropout)
 
+# Está bien
 if torch.cuda.device_count() > 1:
     print(f"Let's use {torch.cuda.device_count()} GPUs!")
     transformer = nn.DataParallel(transformer)
@@ -328,6 +344,7 @@ else:
 
 mask = create_mask(max_secuence_length)
 
+# Está bien
 class LabelSmoothingLoss(nn.Module):
     def __init__(self, classes, smoothing=0.1, dim=-1, ignore_index=-100):
         super(LabelSmoothingLoss, self).__init__()

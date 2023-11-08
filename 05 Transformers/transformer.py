@@ -1,84 +1,6 @@
-from datasets import load_from_disk
 import torch
-from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
-import tiktoken
-import numpy as np
-import time
-import os
 
-path = "data/opus100_croped_10"
-opus100 = load_from_disk(path)
-
-EPOCH0 = 2214
-STEP0 = 1631718
-SUBSET = False
-MODEL_PATH = f"model"
-EPOCHS = 100000
-GPUS = 1
-GPU_NUMBER = 0
-LR = 1e-4
-if GPUS > 1:
-    BS = 630
-else:
-    BS = 630
-
-class Opus100Dataset(Dataset):
-    def __init__(self, dataset, source_language, target_language, tokenizer, start_token, end_token, padding_token, max_length):
-        self.dataset = dataset
-        self.source_language = source_language
-        self.target_language = target_language
-        self.tokenizer = tokenizer
-        self.start_token = start_token
-        self.end_token = end_token
-        self.padding_token = padding_token
-        self.max_length = max_length
-    
-    def __len__(self):
-        return len(self.dataset)
-    
-    def encode(self, text):
-        encoded = self.tokenizer(text)
-        encoded = self.start_token + encoded + self.end_token
-        if len(encoded) > self.max_length:  # Truncate if too long
-            encoded = encoded[:self.max_length]
-        else:  # Pad if too short
-            encoded = encoded + self.padding_token * (self.max_length - len(encoded))
-        return torch.tensor(encoded)
-    
-    def __getitem__(self, idx):
-        source = self.dataset[idx]["translation"][self.source_language]
-        source = self.encode(source)
-
-        target = self.dataset[idx]["translation"][self.target_language]
-        target = self.encode(target)
-        return source, target
-
-encoder = tiktoken.get_encoding("cl100k_base")
-start_token = encoder.encode(chr(1))
-end_token = encoder.encode(chr(2))
-padding_token = encoder.encode(chr(3))
-
-max_secuence_length = 10+2 #104
-train_dataset = Opus100Dataset(opus100["train"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
-validation_dataset = Opus100Dataset(opus100["validation"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
-test_dataset = Opus100Dataset(opus100["test"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
-
-if SUBSET:
-    def subsample_dataset(dataset, new_size):
-        indices = np.random.choice(len(dataset), new_size, replace=False)
-        indices = indices.tolist()  # Convert numpy.int64 indices to native int
-        return torch.utils.data.Subset(dataset, indices)
-    new_size = 500  # Elige el tamaño que prefieras
-    train_dataset = subsample_dataset(train_dataset, new_size)
-    validation_dataset = subsample_dataset(validation_dataset, new_size)
-    test_dataset = subsample_dataset(test_dataset, new_size)
-
-train_dataloader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
-validation_dataloader = DataLoader(validation_dataset, batch_size=BS, shuffle=False)
-test_dataloader = DataLoader(test_dataset, batch_size=BS, shuffle=False)
-
-# Está bien
 class Embedding(nn.Module):
     def __init__(self, vocab_size, embedding_dim):
         super().__init__()
@@ -90,7 +12,6 @@ class Embedding(nn.Module):
     def forward(self, x):
         return self.embedding(x)
 
-# Modificar y quitar el import math
 class PositionalEncoding(nn.Module):
     def __init__(self, max_sequence_len, embedding_model_dim):
         super().__init__()
@@ -109,7 +30,6 @@ class PositionalEncoding(nn.Module):
         x = x + self.positional_encoding[:,:sequence_len]
         return x
 
-# Modificar y quitar el import math
 class ScaledDotProductAttention(nn.Module):
     def __init__(self, dim_embedding):
         super().__init__()
@@ -125,7 +45,6 @@ class ScaledDotProductAttention(nn.Module):
         output = torch.matmul(attention_matrix, value)
         return output
 
-# Está bien
 class MultiHeadAttention(nn.Module):
     def __init__(self, heads, dim_embedding):
         super().__init__()
@@ -152,7 +71,6 @@ class MultiHeadAttention(nn.Module):
         output = self.attention(concat)
         return output
 
-# Está bien
 class AddAndNorm(nn.Module):
     def __init__(self, dim_embedding):
         super().__init__()
@@ -161,7 +79,6 @@ class AddAndNorm(nn.Module):
     def forward(self, x, sublayer):
         return self.normalization(torch.add(x, sublayer))
 
-# Está bien
 class FeedForward(nn.Module):
     def __init__(self, dim_embedding, increment=4):
         super().__init__()
@@ -175,7 +92,6 @@ class FeedForward(nn.Module):
         x = self.feed_forward(x)
         return x
 
-# Está bien
 class Linear(nn.Module):
     def __init__(self, dim_embedding, vocab_size):
         super().__init__()
@@ -185,7 +101,6 @@ class Linear(nn.Module):
         x = self.linear(x)
         return x
 
-# Está bien
 class Softmax(nn.Module):
     def __init__(self):
         super().__init__()
@@ -195,7 +110,6 @@ class Softmax(nn.Module):
         x = self.softmax(x)
         return x
 
-# Está bien
 class Dropout(torch.nn.Module):
     def __init__(self, p=0.1):
         super().__init__()
@@ -207,7 +121,6 @@ class Dropout(torch.nn.Module):
         else:
             return x
 
-# Está bien
 class EncoderLayer(nn.Module):
     def __init__(self, heads, dim_embedding, prob_dropout=0.1):
         super().__init__()
@@ -227,7 +140,6 @@ class EncoderLayer(nn.Module):
         add_and_norm_2 = self.add_and_norm_2(add_and_norm_1, dropout2)
         return add_and_norm_2
 
-# Está bien
 class Encoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
@@ -238,7 +150,6 @@ class Encoder(nn.Module):
             x = encoder_layer(x)
         return x
 
-# Está bien
 class TransformerEncoder(nn.Module):
     def __init__(self, vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout=0.1):
         super().__init__()
@@ -252,7 +163,6 @@ class TransformerEncoder(nn.Module):
         encoder = self.encoder(positional_encoding)
         return encoder
 
-# Está bien
 class DecoderLayer(nn.Module):
     def __init__(self, heads, dim_embedding, prob_dropout=0.1):
         super().__init__()
@@ -287,7 +197,6 @@ class DecoderLayer(nn.Module):
 
         return add_and_norm_3
 
-# Está bien
 class Decoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
@@ -298,7 +207,6 @@ class Decoder(nn.Module):
             x = decoder_layer(x, encoder_output, mask)
         return x
 
-# Está bien
 class TransformerDecoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, vocab_size, max_sequence_len, prob_dropout=0.1):
         super().__init__()
@@ -316,7 +224,6 @@ class TransformerDecoder(nn.Module):
         x = self.softmax(x)
         return x
 
-# Está bien
 class Transformer(nn.Module):
     def __init__(self, vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout=0.1):
         super().__init__()
@@ -328,218 +235,3 @@ class Transformer(nn.Module):
         decoder_output = self.decoder(target, encoder_output, mask)
         return decoder_output
 
-vocab_size = encoder.n_vocab
-dim_embedding = 512
-heads = 8
-Nx = 6
-prob_dropout = 0.1
-transformer = Transformer(vocab_size, dim_embedding, max_secuence_length, heads, Nx, prob_dropout)
-
-# Está bien
-if torch.cuda.device_count() > 1 and GPUS > 1:
-    print(f"Let's use {torch.cuda.device_count()} GPUs!")
-    transformer = nn.DataParallel(transformer)
-
-    def create_mask(sequence_len):
-        mask = torch.tril(torch.ones((2*sequence_len, sequence_len)))
-        return mask
-else:
-    def create_mask(sequence_len):
-        mask = torch.tril(torch.ones((sequence_len, sequence_len)))
-        return mask
-
-mask = create_mask(max_secuence_length)
-
-# Está bien
-class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes, smoothing=0.1, dim=-1, ignore_index=-100):
-        super(LabelSmoothingLoss, self).__init__()
-        self.confidence = 1.0 - smoothing
-        self.smoothing = smoothing
-        self.classes = classes
-        self.dim = dim
-        self.ignore_index = ignore_index
-
-    def forward(self, pred, target):
-        pred = pred.log_softmax(dim=self.dim)
-        with torch.no_grad():
-            true_dist = torch.zeros_like(pred)
-            true_dist.fill_(self.smoothing / (self.classes - 1))
-            true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
-            mask = (target == self.ignore_index).unsqueeze(1).expand_as(true_dist)
-            if mask.any():
-                true_dist[mask] = 0
-        return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
-
-loss_function = LabelSmoothingLoss(classes=vocab_size, smoothing=0.1, ignore_index=padding_token[0])
-
-optimizer = torch.optim.Adam(transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9)
-
-class Step():
-    def __init__(self):
-        self.step = 0
-    
-    def set_step(self, st):
-        self.step = st
-    
-    def get_step(self):
-        return int(self.step)
-
-class LearningRate():
-    def __init__(self):
-        self.lr = 0
-    
-    def set_lr(self, l_r_):
-        self.lr = l_r_
-    
-    def get_lr(self):
-        return self.lr
-
-actual_step = Step()
-actual_lr = LearningRate()
-
-def calculate_lr(step_num, dim_embeding_model=512, warmup_steps=4000):
-    step_num += 1e-7 # Avoid division by zero
-    step_num += STEP0
-    actual_step.set_step(step_num)
-    lr = (dim_embeding_model**-0.5) * min(step_num**-0.5, step_num*(warmup_steps**-1.5))
-    actual_lr.set_lr(lr)
-    return lr
-
-lr_lambda = lambda step: calculate_lr(step, dim_embeding_model=dim_embedding)
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
-def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
-    mean_loss = 0
-    lr_list = []
-    for batch, (src, trg) in enumerate(dataloader):
-        src = src.to(device)
-        trg = trg.to(device)
-        mask = mask.to(device)
-
-        pred = model(src, trg, mask)
-        loss = loss_fn(pred.transpose(1, 2), trg)
-        mean_loss += loss.item()
-
-        # lr = optimizer.param_groups[0]['lr']
-        lr = actual_lr.get_lr()
-        lr_list.append(lr)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
-
-        if batch % 100 == 0:
-            loss, current = loss.item(), batch * len(src)
-            print(f"loss: {loss:0.10f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {lr}")
-    return mean_loss/num_batches, np.array(lr_list)
-
-def validation_loop(dataloader, model, loss_fn, device, mask):
-    num_batches = len(dataloader)
-    validation_loss = 0
-    with torch.no_grad():
-        for src, trg in dataloader:
-            src = src.to(device)
-            trg = trg.to(device)
-            mask = mask.to(device)
-
-            pred = model(src, trg, mask)
-            validation_loss += loss_fn(pred.transpose(1, 2), trg).item()
-    validation_loss /= num_batches
-    print(f"Avg validation loss: {validation_loss:>8f}")
-    return validation_loss
-
-def elapsed_time(t0):
-    t = time.time() - t0  # tiempo transcurrido en segundos
-
-    # Convertir el tiempo a días, horas, minutos y segundos
-    days, t = divmod(t, 86400)  # 86400 segundos en un día
-    hours, t = divmod(t, 3600)  # 3600 segundos en una hora
-    minutes, seconds = divmod(t, 60)  # 60 segundos en un minuto
-
-    return int(days), int(hours), int(minutes), int(seconds)
-
-def elapsed_seconds(days, hours, minutes, seconds):
-    return days * 86400 + hours * 3600 + minutes * 60 + seconds
-
-if torch.cuda.device_count() > 1 and GPUS > 1:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using {torch.cuda.device_count()} GPUs")
-else:
-    if torch.cuda.is_available():
-        device = torch.device(f"cuda:{GPU_NUMBER}")
-        print(f"Using GPU {GPU_NUMBER}")
-    else:
-        device = torch.device("cpu")
-        print("Using CPU")
-transformer = transformer.to(device)
-
-if EPOCH0 != 0 or STEP0 != 0:
-    if GPUS > 1:
-        print(f"Loading model from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
-        transformer.load_state_dict(torch.load(f'{MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth'))
-        print(f"Model loaded from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
-    else:
-        print(f"Loading model from {MODEL_PATH}/transformer_model_{EPOCH0}_{STEP0}.pth")
-        weights = f"{MODEL_PATH}/transformer_model_{EPOCH0}_{STEP0}.pth"
-        transformer = torch.load(weights, map_location=device)
-        if isinstance(transformer, nn.DataParallel):
-            print("Transforming model to nn.Module")
-            transformer = transformer.module
-        print(f"Model loaded from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
-
-    print(f"load best validation loss from {MODEL_PATH}/best_validation_loss_{EPOCH0}_{STEP0}.npy")
-    best_loss = np.load(f'{MODEL_PATH}/validation_loss_{EPOCH0}_{STEP0}.npy')
-    print(f"best validation loss: {best_loss}")
-else:
-    best_loss = 1000000
-
-train_loss_list = []
-train_lr_list = []
-validation_loss_list = []
-train_loss_list = np.array(train_loss_list)
-train_lr_list = np.array(train_lr_list)
-validation_loss_list = np.array(validation_loss_list)
-
-t0 = time.time()
-# max_seconds = 60*60*11 + 60*30 # 11 horas y 30 minutos
-max_seconds = 60*60*24*1000 # 1000 días
-
-for epoch in range(EPOCH0, EPOCHS, 1):
-    days, hours, minutes, seconds = elapsed_time(t0)
-    print(f"\nEpoch {epoch}\n-------------------------------, {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
-    train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, epoch)
-    validation_loss = validation_loop(validation_dataloader, transformer, loss_function, device, mask)
-
-    train_loss_list = np.append(train_loss_list, train_loss)
-    train_lr_list = np.append(train_lr_list, train_lr)
-    validation_loss_list = np.append(validation_loss_list, validation_loss)
-
-    if validation_loss < best_loss:
-        best_loss = validation_loss
-        if not os.path.exists(MODEL_PATH):
-            os.makedirs(MODEL_PATH)
-        # Delete all files in folder
-        files = os.listdir(MODEL_PATH)
-        for f in files:
-            os.remove(os.path.join(MODEL_PATH, f))
-        torch.save(transformer.state_dict(), f'{MODEL_PATH}/transformer_{epoch+1}_{actual_step.get_step()}.pth')
-        torch.save(transformer, f'{MODEL_PATH}/transformer_model_{epoch+1}_{actual_step.get_step()}.pth')
-        val = np.array([validation_loss])
-        np.save(f'{MODEL_PATH}/validation_loss_{epoch+1}_{actual_step.get_step()}.npy', val)
-        print(f"Best model saved with loss {best_loss} at epoch {epoch}, in {time.time()-t0} ms, with lr {train_lr[-1]} and in step {actual_step.get_step()} --> {MODEL_PATH}/transformer_{epoch+1}_{actual_step.get_step()}.pth")
-
-    days, hours, minutes, seconds = elapsed_time(t0)
-    train_elapsed_seconds = elapsed_seconds(days, hours, minutes, seconds)
-    # if train_elapsed_seconds > max_seconds:
-    #     print("Time out!")
-    #     break
-
-np.save(f'{MODEL_PATH}/train_loss_list.npy', train_loss_list)
-np.save(f'{MODEL_PATH}/train_lr_list.npy', train_lr_list)
-np.save(f'{MODEL_PATH}/validation_loss_list.npy', validation_loss_list)
-
-print("Done!")

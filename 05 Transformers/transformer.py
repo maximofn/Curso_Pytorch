@@ -10,12 +10,18 @@ import os
 path = "data/opus100_croped_10"
 opus100 = load_from_disk(path)
 
-BS = 512
-EPOCH0 = 0
-STEP0 = 0
+EPOCH0 = 2214
+STEP0 = 1631718
 SUBSET = False
 MODEL_PATH = f"model"
 EPOCHS = 100000
+GPUS = 1
+GPU_NUMBER = 0
+LR = 1e-4
+if GPUS > 1:
+    BS = 630
+else:
+    BS = 630
 
 class Opus100Dataset(Dataset):
     def __init__(self, dataset, source_language, target_language, tokenizer, start_token, end_token, padding_token, max_length):
@@ -330,7 +336,7 @@ prob_dropout = 0.1
 transformer = Transformer(vocab_size, dim_embedding, max_secuence_length, heads, Nx, prob_dropout)
 
 # Está bien
-if torch.cuda.device_count() > 1:
+if torch.cuda.device_count() > 1 and GPUS > 1:
     print(f"Let's use {torch.cuda.device_count()} GPUs!")
     transformer = nn.DataParallel(transformer)
 
@@ -367,7 +373,7 @@ class LabelSmoothingLoss(nn.Module):
 
 loss_function = LabelSmoothingLoss(classes=vocab_size, smoothing=0.1, ignore_index=padding_token[0])
 
-optimizer = torch.optim.Adam(transformer.parameters(), lr=1e-4, betas=(0.9, 0.98), eps=1e-9)
+optimizer = torch.optim.Adam(transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9)
 
 class Step():
     def __init__(self):
@@ -459,14 +465,37 @@ def elapsed_time(t0):
 def elapsed_seconds(days, hours, minutes, seconds):
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.device_count() > 1 and GPUS > 1:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using {torch.cuda.device_count()} GPUs")
+else:
+    if torch.cuda.is_available():
+        device = torch.device(f"cuda:{GPU_NUMBER}")
+        print(f"Using GPU {GPU_NUMBER}")
+    else:
+        device = torch.device("cpu")
+        print("Using CPU")
 transformer = transformer.to(device)
 
 if EPOCH0 != 0 or STEP0 != 0:
-    print(f"Loading model from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
-    transformer.load_state_dict(torch.load(f'{MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth'))
-    print(f"Model loaded from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
+    if GPUS > 1:
+        print(f"Loading model from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
+        transformer.load_state_dict(torch.load(f'{MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth'))
+        print(f"Model loaded from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
+    else:
+        print(f"Loading model from {MODEL_PATH}/transformer_model_{EPOCH0}_{STEP0}.pth")
+        weights = f"{MODEL_PATH}/transformer_model_{EPOCH0}_{STEP0}.pth"
+        transformer = torch.load(weights, map_location=device)
+        if isinstance(transformer, nn.DataParallel):
+            print("Transforming model to nn.Module")
+            transformer = transformer.module
+        print(f"Model loaded from {MODEL_PATH}/transformer_{EPOCH0}_{STEP0}.pth")
+
+    print(f"load best validation loss from {MODEL_PATH}/best_validation_loss_{EPOCH0}_{STEP0}.npy")
+    best_loss = np.load(f'{MODEL_PATH}/validation_loss_{EPOCH0}_{STEP0}.npy')
+    print(f"best validation loss: {best_loss}")
+else:
+    best_loss = 1000000
 
 train_loss_list = []
 train_lr_list = []
@@ -475,11 +504,9 @@ train_loss_list = np.array(train_loss_list)
 train_lr_list = np.array(train_lr_list)
 validation_loss_list = np.array(validation_loss_list)
 
-best_loss = 1000000
-
 t0 = time.time()
 # max_seconds = 60*60*11 + 60*30 # 11 horas y 30 minutos
-max_seconds = 60*60*24*5 # 5 días
+max_seconds = 60*60*24*1000 # 1000 días
 
 for epoch in range(EPOCH0, EPOCHS, 1):
     days, hours, minutes, seconds = elapsed_time(t0)
@@ -495,9 +522,14 @@ for epoch in range(EPOCH0, EPOCHS, 1):
         best_loss = validation_loss
         if not os.path.exists(MODEL_PATH):
             os.makedirs(MODEL_PATH)
+        # Delete all files in folder
+        files = os.listdir(MODEL_PATH)
+        for f in files:
+            os.remove(os.path.join(MODEL_PATH, f))
         torch.save(transformer.state_dict(), f'{MODEL_PATH}/transformer_{epoch+1}_{actual_step.get_step()}.pth')
         torch.save(transformer, f'{MODEL_PATH}/transformer_model_{epoch+1}_{actual_step.get_step()}.pth')
-        torch.jit.save(torch.jit.script(transformer.cpu()), f'{MODEL_PATH}/transformer_jit_{epoch+1}_{actual_step.get_step()}.zip')
+        val = np.array([validation_loss])
+        np.save(f'{MODEL_PATH}/validation_loss_{epoch+1}_{actual_step.get_step()}.npy', val)
         print(f"Best model saved with loss {best_loss} at epoch {epoch}, in {time.time()-t0} ms, with lr {train_lr[-1]} and in step {actual_step.get_step()} --> {MODEL_PATH}/transformer_{epoch+1}_{actual_step.get_step()}.pth")
 
     days, hours, minutes, seconds = elapsed_time(t0)

@@ -138,7 +138,10 @@ def calculate_lr(step_num, dim_embeding_model=512, warmup_steps=4000):
     step_num += 1e-7 # Avoid division by zero
     step_num += STEP0
     actual_step.set_step(step_num)
-    lr = (dim_embeding_model**-0.5) * min(step_num**-0.5, step_num*(warmup_steps**-1.5))
+    step_num_exp = -0.4
+    warmup_steps_exp = -2.6
+    dim_embeding_model_exp = -0.1
+    lr = np.power(dim_embeding_model, dim_embeding_model_exp) * np.minimum(np.power(step_num, step_num_exp), step_num * np.power(warmup_steps, warmup_steps_exp))
     actual_lr.set_lr(lr)
     return lr
 

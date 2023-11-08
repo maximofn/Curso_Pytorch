@@ -1,6 +1,5 @@
-from datasets import load_from_disk
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 import torch.nn as nn
 import tiktoken
 import numpy as np
@@ -9,52 +8,40 @@ import os
 
 from transformer import Transformer
 
-path = "data/opus100_croped_10"
-opus100 = load_from_disk(path)
+train_inputs_path = "data/opus100_croped_10/train_inputs.pt"
+train_labels_path = "data/opus100_croped_10/train_labels.pt"
+train_inputs = torch.load(train_inputs_path)
+train_labels = torch.load(train_labels_path)
+test_inputs_path = "data/opus100_croped_10/test_inputs.pt"
+test_labels_path = "data/opus100_croped_10/test_labels.pt"
+test_inputs = torch.load(test_inputs_path)
+test_labels = torch.load(test_labels_path)
+validation_inputs_path = "data/opus100_croped_10/validation_inputs.pt"
+validation_labels_path = "data/opus100_croped_10/validation_labels.pt"
 
-EPOCH0 = 2214
-STEP0 = 1631718
+validation_inputs = torch.load(validation_inputs_path)
+validation_labels = torch.load(validation_labels_path)
+
+EPOCH0 = 0
+STEP0 = 0
+LR = 1e-4
 SUBSET = False
 MODEL_PATH = f"model"
 EPOCHS = 100000
 GPUS = 1
 GPU_NUMBER = 0
-LR = 1e-4
 if GPUS > 1:
-    BS = 630
+    BS = 620
 else:
-    BS = 630
+    BS = 620
 
-class Opus100Dataset(Dataset):
-    def __init__(self, dataset, source_language, target_language, tokenizer, start_token, end_token, padding_token, max_length):
-        self.dataset = dataset
-        self.source_language = source_language
-        self.target_language = target_language
-        self.tokenizer = tokenizer
-        self.start_token = start_token
-        self.end_token = end_token
-        self.padding_token = padding_token
-        self.max_length = max_length
-    
-    def __len__(self):
-        return len(self.dataset)
-    
-    def encode(self, text):
-        encoded = self.tokenizer(text)
-        encoded = self.start_token + encoded + self.end_token
-        if len(encoded) > self.max_length:  # Truncate if too long
-            encoded = encoded[:self.max_length]
-        else:  # Pad if too short
-            encoded = encoded + self.padding_token * (self.max_length - len(encoded))
-        return torch.tensor(encoded)
-    
-    def __getitem__(self, idx):
-        source = self.dataset[idx]["translation"][self.source_language]
-        source = self.encode(source)
-
-        target = self.dataset[idx]["translation"][self.target_language]
-        target = self.encode(target)
-        return source, target
+if os.path.exists(MODEL_PATH):
+    files = os.listdir(MODEL_PATH)
+    for file in files:
+        if "transformer" in file:
+            name = file.split(".")[0]
+            STEP0 = int(name.split("_")[-1])
+            EPOCH0 = int(name.split("_")[-2])
 
 encoder = tiktoken.get_encoding("cl100k_base")
 start_token = encoder.encode(chr(1))
@@ -62,9 +49,9 @@ end_token = encoder.encode(chr(2))
 padding_token = encoder.encode(chr(3))
 
 max_secuence_length = 10+2 #104
-train_dataset = Opus100Dataset(opus100["train"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
-validation_dataset = Opus100Dataset(opus100["validation"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
-test_dataset = Opus100Dataset(opus100["test"], "en", "es", encoder.encode, start_token, end_token, padding_token, max_secuence_length)
+train_dataset = TensorDataset(train_inputs, train_labels)
+test_dataset = TensorDataset(test_inputs, test_labels)
+validation_dataset = TensorDataset(validation_inputs, validation_labels)
 
 if SUBSET:
     def subsample_dataset(dataset, new_size):

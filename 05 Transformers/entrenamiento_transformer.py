@@ -25,10 +25,15 @@ validation_labels = torch.load(validation_labels_path)
 EPOCH0 = 0
 STEP0 = 0
 LR = 1e-4
-SUBSET = False
-LEN_SUBSET_TRAIN = 500
-LEN_SUBSET_VALIDATION = int(LEN_SUBSET_TRAIN/10)
-LEN_SUBSET_TEST = int(LEN_SUBSET_TRAIN/10)
+SUBSET = True
+LEN_SUBSET_TRAIN = 1000
+if LEN_SUBSET_TRAIN == 1:
+    test_inputs = train_inputs
+    test_labels = train_labels
+    validation_inputs = train_inputs
+    validation_labels = train_labels
+LEN_SUBSET_VALIDATION = min(max(int(LEN_SUBSET_TRAIN/10), 1), len(validation_inputs))
+LEN_SUBSET_TEST = min(max(int(LEN_SUBSET_TRAIN/10), 1), len(test_inputs))
 MODEL_PATH = f"model"
 EPOCHS = 100000
 GPUS = 1
@@ -67,6 +72,7 @@ if SUBSET:
     train_dataset = subsample_dataset(train_dataset, LEN_SUBSET_TRAIN)
     validation_dataset = subsample_dataset(validation_dataset, LEN_SUBSET_VALIDATION)
     test_dataset = subsample_dataset(test_dataset, LEN_SUBSET_TEST)
+    print(f"SUBSET: train: {len(train_dataset)}, validation: {len(validation_dataset)}, test: {len(test_dataset)}")
 
 train_dataloader = DataLoader(train_dataset, batch_size=BS, shuffle=True)
 validation_dataloader = DataLoader(validation_dataset, batch_size=BS, shuffle=False)
@@ -84,7 +90,7 @@ def prepare_source_sentence(sentence, start_token, end_token, pad_token, max_len
 
 def prepare_target_sentence(sentence, start_token, pad_token, max_length, device):
     sentence = encoder.encode(sentence)
-    sentence = start_token + sentence
+    sentence = start_token + sentence + end_token
     if len(sentence) < max_length:
         sentence = sentence + pad_token * (max_length - len(sentence))
     else:
@@ -113,7 +119,7 @@ mask = create_mask(max_secuence_length)
 
 def get_target_sentence(source, target, mask, model, device, end_token, max_len):
     model = model.to(device)
-    model.eval()
+    # model.eval()
     source = source.to(device)
     target = target.to(device)
     mask = mask.to(device)
@@ -132,9 +138,16 @@ def get_target_sentence(source, target, mask, model, device, end_token, max_len)
     return output_sentence
 
 def decode_sentence(sentence, decoder, end_token):
+    decoded = ""
+    if isinstance(end_token, list):
+        end_token = end_token[0]
+    if isinstance(sentence, torch.Tensor):
+        sentence = sentence.cpu().numpy()
     if end_token in sentence:
-        sentence = sentence[:sentence.index(end_token)]
-    decoded = decoder(sentence[1:-1])
+        position_end_token = int(np.where(sentence == end_token)[0])
+        sentence = sentence[:position_end_token+1]
+    sentence = sentence[1:-1]   # Remove start and end token
+    decoded = decoder(sentence)
     return decoded
 
 class LabelSmoothingLoss(nn.Module):
@@ -202,6 +215,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
     num_batches = len(dataloader)
     mean_loss = 0
     lr_list = []
+    # model.train()
     for batch, (src, trg) in enumerate(dataloader):
         src = src.to(device)
         trg = trg.to(device)
@@ -225,11 +239,19 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
             print(f"loss: {loss:0.10f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {lr:0.19f} - {(time.localtime().tm_year):02d}-{(time.localtime().tm_mon):02d}-{(time.localtime().tm_mday):02d}, {(time.localtime().tm_hour):02d}:{(time.localtime().tm_min):02d}:{(time.localtime().tm_sec):02d}")
     return mean_loss/num_batches, np.array(lr_list)
 
+if SUBSET and LEN_SUBSET_TRAIN < 100:
+    sample = next(iter(train_dataloader))
+    src, trg = sample
+    encoded_src = src[0].cpu().numpy()
+    decoded_src = decode_sentence(encoded_src, encoder.decode, end_token)
+    print(f"English sentence: {decoded_src}")
+
 def validation_loop(dataloader, model, loss_fn, device, mask, epoch):
     num_batches = len(dataloader)
     validation_loss = 0
     correct_predictions = 0
     total_predictions = 0
+    # model.eval()
 
     with torch.no_grad():
         for src, trg in dataloader:
@@ -242,22 +264,27 @@ def validation_loop(dataloader, model, loss_fn, device, mask, epoch):
             validation_loss += loss.item()
 
             predicted_ids = torch.argmax(pred, dim=2)
-            correct_predictions += (predicted_ids == trg).sum().item()
-            total_predictions += trg.numel()
+            for pred_sent, trg_sent in zip(predicted_ids, trg):
+                if torch.equal(pred_sent, trg_sent):
+                    correct_predictions += 1
+            total_predictions += trg.size(0)
 
     validation_loss /= num_batches
     accuracy = correct_predictions / total_predictions
-    print(f"Epoch {epoch} average validation loss: {validation_loss:>8f}, accuracy: {(100*accuracy):>3.2f}% ({correct_predictions}/{total_predictions})")
+    print(f"Epoch {epoch} average validation loss: {validation_loss:0.8f}, best loss: {best_loss:0.8f}, accuracy: {(100*accuracy):>3.2f}% ({correct_predictions}/{total_predictions})")
 
-    sentence_en = "I have learned a lot from this course"
+    if SUBSET and LEN_SUBSET_TRAIN < 100:
+        sentence_en = decoded_src
+    else:
+        sentence_en = "I have learned a lot from this course"
     encode_sentence_en = prepare_source_sentence(sentence_en, start_token, end_token, padding_token, max_secuence_length, device)
     sentence_es = ""
     encode_sentence_es = prepare_target_sentence(sentence_es, start_token, padding_token, max_secuence_length, device)
-    encoded_output = get_target_sentence(encode_sentence_en, encode_sentence_es, mask, transformer, device, end_token, max_secuence_length).squeeze(0).cpu().numpy()
-    decoded_output = decode_sentence(encoded_output, encoder.decode, max_secuence_length)
+    encode_sentence_es = get_target_sentence(encode_sentence_en, encode_sentence_es, mask, model, device, end_token, max_secuence_length).squeeze(0).cpu().numpy()
+    sentence_es = decode_sentence(encode_sentence_es, encoder.decode, end_token)
     print(f"Epoch {epoch}: English sentence:    {sentence_en}")
-    print(f"Epoch {epoch}: Spanish translation: {decoded_output}")
-    return validation_loss
+    print(f"Epoch {epoch}: Spanish translation: {sentence_es}")
+    return validation_loss, accuracy
 
 def elapsed_time(t0):
     t = time.time() - t0  # tiempo transcurrido en segundos
@@ -312,20 +339,23 @@ train_lr_list = np.array(train_lr_list)
 validation_loss_list = np.array(validation_loss_list)
 
 t0 = time.time()
+t0_epoch = time.time()
 # max_seconds = 60*60*11 + 60*30 # 11 horas y 30 minutos
 max_seconds = 60*60*24*1000 # 1000 días
 
 for epoch in range(EPOCH0, EPOCHS, 1):
     days, hours, minutes, seconds = elapsed_time(t0)
-    print(f"\nEpoch {epoch}\n-------------------------------, {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
+    days_epoch, hours_epoch, minutes_epoch, seconds_epoch = elapsed_time(t0_epoch)
+    t0_epoch = time.time()
+    print(f"\nEpoch {epoch}\n-------------------------------, Total: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds\tEpoch: {days_epoch} days, {hours_epoch} hours, {minutes_epoch} minutes, {seconds_epoch} seconds")
     train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, epoch)
-    validation_loss = validation_loop(validation_dataloader, transformer, loss_function, device, mask, epoch)
+    validation_loss, accuracy = validation_loop(validation_dataloader, transformer, loss_function, device, mask, epoch)
 
     train_loss_list = np.append(train_loss_list, train_loss)
     train_lr_list = np.append(train_lr_list, train_lr)
     validation_loss_list = np.append(validation_loss_list, validation_loss)
 
-    if validation_loss < best_loss and not SUBSET:
+    if validation_loss < best_loss:
         best_loss = validation_loss
         if not os.path.exists(MODEL_PATH):
             os.makedirs(MODEL_PATH)
@@ -343,6 +373,10 @@ for epoch in range(EPOCH0, EPOCHS, 1):
     train_elapsed_seconds = elapsed_seconds(days, hours, minutes, seconds)
     if train_elapsed_seconds > max_seconds:
         print("Time out!")
+        break
+
+    if LEN_SUBSET_TRAIN == 1 and accuracy == 1.0:
+        print("Accuracy 100%!")
         break
 
 np.save(f'{MODEL_PATH}/train_loss_list.npy', train_loss_list)

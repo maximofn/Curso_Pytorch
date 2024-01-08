@@ -42,7 +42,7 @@ if GPUS > 1:
     BS = 350
 else:
     BS = 350
-DIMENSION_EMBEDDING = 128 #512
+DIMENSION_EMBEDDING = 32 #512
 NUMBER_OF_HEADS = 8 # 8
 NUMBER_OF_TRANSFORMER_BLOCKS = 4 # 6
 
@@ -200,9 +200,9 @@ def calculate_lr(step_num, dim_embedding_model=512, warmup_steps=4000):
     step_num += 1e-7 # Avoid division by zero
     step_num += STEP0
     actual_step.set_step(step_num)
-    step_num_exp = -0.4
-    warmup_steps_exp = -2.6
-    dim_embedding_model_exp = -0.1
+    step_num_exp = -0.7
+    warmup_steps_exp = -2.0
+    dim_embedding_model_exp = -0.001
     lr = np.power(dim_embedding_model, dim_embedding_model_exp) * np.minimum(np.power(step_num, step_num_exp), step_num * np.power(warmup_steps, warmup_steps_exp))
     actual_lr.set_lr(lr)
     return lr
@@ -327,6 +327,8 @@ if EPOCH0 != 0 or STEP0 != 0:
 
     print(f"load best validation loss from {MODEL_PATH}/best_validation_loss_{EPOCH0}_{STEP0}.npy")
     best_loss = np.load(f'{MODEL_PATH}/validation_loss_{EPOCH0}_{STEP0}.npy')
+    best_loss = best_loss[0]
+    best_loss = float(best_loss)
     print(f"best validation loss: {best_loss}")
 else:
     best_loss = 1000000

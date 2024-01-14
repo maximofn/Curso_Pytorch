@@ -1,5 +1,20 @@
 import torch
 import torch.nn as nn
+import torch.nn.init as init
+
+class CustomLinear(nn.Module):
+    def __init__(self, in_features, out_features):
+        super(CustomLinear, self).__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        init.kaiming_uniform_(self.linear.weight, nonlinearity='relu')
+        if self.linear.bias is not None:
+            init.zeros_(self.linear.bias)
+
+class CustomEmbedding(nn.Module):
+    def __init__(self, num_embeddings, embedding_dim):
+        super(CustomEmbedding, self).__init__()
+        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+        init.xavier_uniform_(self.embedding.weight)
 
 class Embedding(nn.Module):
     def __init__(self, vocab_size, embedding_dim):
@@ -7,7 +22,7 @@ class Embedding(nn.Module):
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
 
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.embedding = CustomEmbedding(vocab_size, embedding_dim)
 
     def forward(self, x):
         return self.embedding(x)
@@ -52,10 +67,10 @@ class MultiHeadAttention(nn.Module):
         self.dim_embedding = dim_embedding
         self.dim_proyection = dim_embedding // heads
         self.heads = heads
-        self.proyection_Q = nn.Linear(dim_embedding, dim_embedding)
-        self.proyection_K = nn.Linear(dim_embedding, dim_embedding)
-        self.proyection_V = nn.Linear(dim_embedding, dim_embedding)
-        self.attention = nn.Linear(dim_embedding, dim_embedding)
+        self.proyection_Q = CustomLinear(dim_embedding, dim_embedding)
+        self.proyection_K = CustomLinear(dim_embedding, dim_embedding)
+        self.proyection_V = CustomLinear(dim_embedding, dim_embedding)
+        self.attention = CustomLinear(dim_embedding, dim_embedding)
         self.scaled_dot_product_attention = ScaledDotProductAttention(self.dim_proyection)
     
     def forward(self, Q, K, V, mask=None):
@@ -83,9 +98,9 @@ class FeedForward(nn.Module):
     def __init__(self, dim_embedding, increment=4):
         super().__init__()
         self.feed_forward = nn.Sequential(
-            nn.Linear(dim_embedding, dim_embedding*increment),
+            CustomLinear(dim_embedding, dim_embedding*increment),
             nn.ReLU(),
-            nn.Linear(dim_embedding*increment, dim_embedding)
+            CustomLinear(dim_embedding*increment, dim_embedding)
         )
     
     def forward(self, x):
@@ -95,7 +110,7 @@ class FeedForward(nn.Module):
 class Linear(nn.Module):
     def __init__(self, dim_embedding, vocab_size):
         super().__init__()
-        self.linear = nn.Linear(dim_embedding, vocab_size)
+        self.linear = CustomLinear(dim_embedding, vocab_size)
         
     def forward(self, x):
         x = self.linear(x)

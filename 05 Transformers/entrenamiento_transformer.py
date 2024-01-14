@@ -33,7 +33,7 @@ validation_labels = torch.load(validation_labels_path)
 
 EPOCH0 = 0
 STEP0 = 0
-LR = 1e7
+LR = 1e-4
 UPDATE_LR = False
 SUBSET = True
 LEN_SUBSET_TRAIN = 1000
@@ -52,9 +52,10 @@ if GPUS > 1:
     BS = 350
 else:
     BS = 350
-DIMENSION_EMBEDDING = 32 #512
+CHECK_GRADIENTS = False
+DIMENSION_EMBEDDING = 512 #512
 NUMBER_OF_HEADS = 8 # 8
-NUMBER_OF_TRANSFORMER_BLOCKS = 4 # 6
+NUMBER_OF_TRANSFORMER_BLOCKS = 6 # 6
 
 if os.path.exists(MODEL_PATH):
     files = os.listdir(MODEL_PATH)
@@ -251,6 +252,14 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
             lr_list.append(lr)
 
         loss.backward()
+        if CHECK_GRADIENTS:
+        min_umbral = 1e-6
+        max_umbral = 1e6
+        for name, param in transformer.named_parameters():
+            if param.grad is not None:
+                norm_gradient = param.grad.norm().item()
+                if norm_gradient < min_umbral or norm_gradient > max_umbral:
+                    print(f"Anormal gradient: {name} - {norm_gradient}")
         optimizer.step()
         optimizer.zero_grad()
         if UPDATE_LR:
@@ -387,7 +396,7 @@ for epoch in range(EPOCH0, EPOCHS, 1):
     train_lr_list = np.append(train_lr_list, train_lr)
     validation_loss_list = np.append(validation_loss_list, validation_loss)
 
-    if validation_loss < best_loss:
+    if validation_loss < best_loss and epoch > 1:
         best_loss = validation_loss
         if not os.path.exists(MODEL_PATH):
             os.makedirs(MODEL_PATH)

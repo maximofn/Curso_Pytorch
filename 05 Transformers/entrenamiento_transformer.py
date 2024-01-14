@@ -8,6 +8,15 @@ import os
 
 from transformer import Transformer
 
+from sacrebleu import corpus_bleu
+import nltk
+from nltk.translate.meteor_score import meteor_score
+from nltk.tokenize import word_tokenize
+from rouge import Rouge 
+
+nltk.download('wordnet')
+rouge = Rouge()
+
 train_inputs_path = "data/opus100_croped_10/train_inputs.pt"
 train_labels_path = "data/opus100_croped_10/train_labels.pt"
 train_inputs = torch.load(train_inputs_path)
@@ -24,7 +33,8 @@ validation_labels = torch.load(validation_labels_path)
 
 EPOCH0 = 0
 STEP0 = 0
-LR = 1e-4
+LR = 1e7
+UPDATE_LR = False
 SUBSET = True
 LEN_SUBSET_TRAIN = 1000
 if LEN_SUBSET_TRAIN == 1:
@@ -144,10 +154,17 @@ def decode_sentence(sentence, decoder, end_token):
     if isinstance(sentence, torch.Tensor):
         sentence = sentence.cpu().numpy()
     if end_token in sentence:
-        position_end_token = int(np.where(sentence == end_token)[0])
+        position_end_token = np.where(sentence == end_token)[0]
+        if len(position_end_token) > 1:
+            position_end_token = position_end_token[0]
+        position_end_token = int(position_end_token)
         sentence = sentence[:position_end_token+1]
     sentence = sentence[1:-1]   # Remove start and end token
-    decoded = decoder(sentence)
+    try:
+        decoded = decoder(sentence)
+    except:
+        Warning(f"Error decoding sentence: {sentence}")
+        decoded = ""
     return decoded
 
 class LabelSmoothingLoss(nn.Module):
@@ -170,7 +187,9 @@ class LabelSmoothingLoss(nn.Module):
                 true_dist[mask] = 0
         return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
 
-loss_function = LabelSmoothingLoss(classes=vocab_size, smoothing=0.1, ignore_index=padding_token[0])
+# loss_function = LabelSmoothingLoss(classes=vocab_size, smoothing=0.1, ignore_index=padding_token[0])
+# loss_function = nn.CrossEntropyLoss(ignore_index=padding_token[0], label_smoothing=0.1)
+loss_function = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(transformer.parameters(), lr=LR, betas=(0.9, 0.98), eps=1e-9)
 
 class Step():
@@ -207,37 +226,41 @@ def calculate_lr(step_num, dim_embedding_model=512, warmup_steps=4000):
     actual_lr.set_lr(lr)
     return lr
 
-lr_lambda = lambda step: calculate_lr(step, dim_embedding_model=DIMENSION_EMBEDDING)
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+if UPDATE_LR:
+    lr_lambda = lambda step: calculate_lr(step, dim_embedding_model=DIMENSION_EMBEDDING)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     mean_loss = 0
     lr_list = []
-    # model.train()
+    model.train()
     for batch, (src, trg) in enumerate(dataloader):
         src = src.to(device)
         trg = trg.to(device)
         mask = mask.to(device)
 
         pred = model(src, trg, mask)
-        loss = loss_fn(pred.transpose(1, 2), trg)
+        loss = loss_fn(pred.view(-1, encoder.n_vocab), trg.view(-1))
         mean_loss += loss.item()
 
         # lr = optimizer.param_groups[0]['lr']
-        lr = actual_lr.get_lr()
-        lr_list.append(lr)
+        if UPDATE_LR:
+            lr = actual_lr.get_lr()
+            lr_list.append(lr)
 
-        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        scheduler.step()
+        optimizer.zero_grad()
+        if UPDATE_LR:
+            scheduler.step()
 
         if batch % 100 == 0:
             loss, current = loss.item(), batch * len(src)
-            print(f"loss: {loss:0.10f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {lr:0.19f} - {(time.localtime().tm_year):02d}-{(time.localtime().tm_mon):02d}-{(time.localtime().tm_mday):02d}, {(time.localtime().tm_hour):02d}:{(time.localtime().tm_min):02d}:{(time.localtime().tm_sec):02d}")
-    return mean_loss/num_batches, np.array(lr_list)
+            current_lr = optimizer.param_groups[0]['lr']
+            print(f"loss: {loss:0.10f} [{current:>5d}/{size:>5d}] - epoch {epoch} - lr {current_lr:0.19f} - {(time.localtime().tm_year):02d}-{(time.localtime().tm_mon):02d}-{(time.localtime().tm_mday):02d}, {(time.localtime().tm_hour):02d}:{(time.localtime().tm_min):02d}:{(time.localtime().tm_sec):02d}")
+    return mean_loss/num_batches, np.array(lr_list), model
 
 if SUBSET and LEN_SUBSET_TRAIN < 100:
     sample = next(iter(train_dataloader))
@@ -271,7 +294,14 @@ def validation_loop(dataloader, model, loss_fn, device, mask, epoch):
 
     validation_loss /= num_batches
     accuracy = correct_predictions / total_predictions
-    print(f"Epoch {epoch} average validation loss: {validation_loss:0.8f}, best loss: {best_loss:0.8f}, accuracy: {(100*accuracy):>3.2f}% ({correct_predictions}/{total_predictions})")
+    pred_sent_decoded = decode_sentence(pred_sent, encoder.decode, end_token)
+    trg_sent_decoded = decode_sentence(trg_sent, encoder.decode, end_token)
+    bleu_score = corpus_bleu(pred_sent_decoded, trg_sent_decoded)
+    pred_sent_tokenized = word_tokenize(pred_sent_decoded)
+    trg_sent_tokenized = word_tokenize(trg_sent_decoded)
+    meteor = meteor_score([pred_sent_tokenized], trg_sent_tokenized)
+    rouge_score = rouge.get_scores(pred_sent_decoded, trg_sent_decoded, avg=True)
+    print(f"Epoch {epoch} average validation loss: {validation_loss:0.8f}, best loss: {best_loss:0.8f}, accuracy: {(100*accuracy):>3.2f}% ({correct_predictions}/{total_predictions}), bleu score: {bleu_score.score:0.8f}, meteor: {meteor:0.8f}, rouge: {rouge_score['rouge-l']['f']:0.8f}")
 
     if SUBSET and LEN_SUBSET_TRAIN < 100:
         sentence_en = decoded_src
@@ -350,7 +380,7 @@ for epoch in range(EPOCH0, EPOCHS, 1):
     days_epoch, hours_epoch, minutes_epoch, seconds_epoch = elapsed_time(t0_epoch)
     t0_epoch = time.time()
     print(f"\nEpoch {epoch}\n-------------------------------, Total: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds\tEpoch: {days_epoch} days, {hours_epoch} hours, {minutes_epoch} minutes, {seconds_epoch} seconds")
-    train_loss, train_lr = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, epoch)
+    train_loss, train_lr, transformer = train_loop(train_dataloader, transformer, loss_function, optimizer, device, mask, epoch)
     validation_loss, accuracy = validation_loop(validation_dataloader, transformer, loss_function, device, mask, epoch)
 
     train_loss_list = np.append(train_loss_list, train_loss)

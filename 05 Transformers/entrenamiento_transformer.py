@@ -253,13 +253,13 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, mask, epoch):
 
         loss.backward()
         if CHECK_GRADIENTS:
-        min_umbral = 1e-6
-        max_umbral = 1e6
-        for name, param in transformer.named_parameters():
-            if param.grad is not None:
-                norm_gradient = param.grad.norm().item()
-                if norm_gradient < min_umbral or norm_gradient > max_umbral:
-                    print(f"Anormal gradient: {name} - {norm_gradient}")
+            min_umbral = 1e-6
+            max_umbral = 1e6
+            for name, param in transformer.named_parameters():
+                if param.grad is not None:
+                    norm_gradient = param.grad.norm().item()
+                    if norm_gradient < min_umbral or norm_gradient > max_umbral:
+                        print(f"Anormal gradient: {name} - {norm_gradient}")
         optimizer.step()
         optimizer.zero_grad()
         if UPDATE_LR:

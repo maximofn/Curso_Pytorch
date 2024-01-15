@@ -9,14 +9,20 @@ class CustomLinear(nn.Module):
         init.kaiming_uniform_(self.linear.weight, nonlinearity='relu')
         if self.linear.bias is not None:
             init.zeros_(self.linear.bias)
+    
+    def forward(self, x):
+        return self.linear(x)
 
 class CustomEmbedding(nn.Module):
     def __init__(self, num_embeddings, embedding_dim):
         super(CustomEmbedding, self).__init__()
         self.embedding = nn.Embedding(num_embeddings, embedding_dim)
         init.xavier_uniform_(self.embedding.weight)
+    
+    def forward(self, x):
+        return self.embedding(x)
 
-class Embedding(nn.Module):
+class MiEmbedding(nn.Module):
     def __init__(self, vocab_size, embedding_dim):
         super().__init__()
         self.vocab_size = vocab_size
@@ -27,7 +33,7 @@ class Embedding(nn.Module):
     def forward(self, x):
         return self.embedding(x)
 
-class PositionalEncoding(nn.Module):
+class MiPositionalEncoding(nn.Module):
     def __init__(self, max_sequence_len, embedding_model_dim):
         super().__init__()
         self.embedding_dim = embedding_model_dim
@@ -155,7 +161,7 @@ class EncoderLayer(nn.Module):
         add_and_norm_2 = self.add_and_norm_2(add_and_norm_1, dropout2)
         return add_and_norm_2
 
-class Encoder(nn.Module):
+class MiEncoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
         self.encoder_layers = nn.ModuleList([EncoderLayer(heads, dim_embedding, prob_dropout) for _ in range(Nx)])
@@ -168,9 +174,9 @@ class Encoder(nn.Module):
 class TransformerEncoder(nn.Module):
     def __init__(self, vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout=0.1):
         super().__init__()
-        self.input_embedding = Embedding(vocab_size, dim_embedding)
-        self.positional_encoding = PositionalEncoding(max_sequence_len, dim_embedding)
-        self.encoder = Encoder(heads, dim_embedding, Nx, prob_dropout)
+        self.input_embedding = MiEmbedding(vocab_size, dim_embedding)
+        self.positional_encoding = MiPositionalEncoding(max_sequence_len, dim_embedding)
+        self.encoder = MiEncoder(heads, dim_embedding, Nx, prob_dropout)
     
     def forward(self, x):
         input_embedding = self.input_embedding(x)
@@ -212,7 +218,7 @@ class DecoderLayer(nn.Module):
 
         return add_and_norm_3
 
-class Decoder(nn.Module):
+class MiDecoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
         self.layers = nn.ModuleList([DecoderLayer(heads, dim_embedding, prob_dropout) for _ in range(Nx)])
@@ -225,9 +231,9 @@ class Decoder(nn.Module):
 class TransformerDecoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, vocab_size, max_sequence_len, prob_dropout=0.1):
         super().__init__()
-        self.embedding = Embedding(vocab_size, dim_embedding)
-        self.positional_encoding = PositionalEncoding(max_sequence_len, dim_embedding)
-        self.decoder = Decoder(heads, dim_embedding, Nx, prob_dropout)
+        self.embedding = MiEmbedding(vocab_size, dim_embedding)
+        self.positional_encoding = MiPositionalEncoding(max_sequence_len, dim_embedding)
+        self.decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
         self.linear = Linear(dim_embedding, vocab_size)
         self.softmax = Softmax()
     
@@ -239,11 +245,33 @@ class TransformerDecoder(nn.Module):
         x = self.softmax(x)
         return x
 
-class Transformer(nn.Module):
-    def __init__(self, vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout=0.1):
+class MiTransformer(nn.Module):
+    def __init__(self, src_vocab_size, tgt_vocab_size, src_max_seq_len, tgt_max_seq_len, dim_embedding, Nx, heads, prob_dropout=0.1, dim_feedforward=2048):
         super().__init__()
-        self.encoder = TransformerEncoder(vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout)
-        self.decoder = TransformerDecoder(heads, dim_embedding, Nx, vocab_size, max_sequence_len, prob_dropout)
+        self.encoder = TransformerEncoder(src_vocab_size, dim_embedding, src_max_seq_len, heads, Nx, prob_dropout)
+        self.decoder = TransformerDecoder(heads, dim_embedding, Nx, tgt_vocab_size, tgt_max_seq_len, prob_dropout)
+        self.embedding = MiEmbedding(tgt_vocab_size, dim_embedding)
+        self.positional_encoding = MiPositionalEncoding(tgt_max_seq_len, dim_embedding)
+        self.mi_decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
+    
+    def encode(self, source):
+        encoder_output = self.encoder(source)
+        return encoder_output
+    
+    def decode_with_linear_and_softmax(self, target, encoder_output, target_mask):
+        decoder_output = self.decoder(target, encoder_output, target_mask)
+        return decoder_output
+    
+    def decode_without_linear_and_softmax(self, target, encoder_output, target_mask):
+        embedding = self.embedding(target)
+        positional_encoding = self.positional_encoding(embedding)
+        decoder_output = self.mi_decoder(positional_encoding, encoder_output, target_mask)
+        return decoder_output
+    
+    def linear_and_softmax(self, decoder_output):
+        linear_output = self.decoder.linear(decoder_output)
+        softmax_output = self.decoder.softmax(linear_output)
+        return softmax_output
     
     def forward(self, source, target, mask=None):
         encoder_output = self.encoder(source)

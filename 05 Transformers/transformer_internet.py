@@ -7,7 +7,11 @@ import torch.nn as nn
 # Math
 import math
 
-MI_TRANSFORMER = True
+from transformer import MiTransformer, MiEncoder, MiDecoder
+
+MI_TRANSFORMER = False
+MI_ENCODER = True
+MI_DECODER = True
 
 # Creating Input Embeddings
 class InputEmbeddings(nn.Module):
@@ -19,10 +23,7 @@ class InputEmbeddings(nn.Module):
         self.embedding = nn.Embedding(vocab_size, d_model) # PyTorch layer that converts integer indices to dense embeddings
 
     def forward(self, x):
-        if MI_TRANSFORMER:
-            return self.embedding(x)
-        else:
-            return self.embedding(x) * math.sqrt(self.d_model) # Normalizing the variance of the embeddings
+        return self.embedding(x) * math.sqrt(self.d_model) # Normalizing the variance of the embeddings
 
 class PositionalEncoding(nn.Module):
     def __init__(self, embedding_model_dim, max_sequence_len, dropout=0.1):
@@ -63,10 +64,7 @@ class LayerNormalization(nn.Module):
         std = x.std(dim = -1, keepdim = True) # Computing the standard deviation of the input data. Keeping the number of dimensions unchanged
 
         # Returning the normalized input
-        if MI_TRANSFORMER:
-          return self.normalization(x)
-        else:
-          return self.alpha * (x-mean) / (std + self.eps) + self.bias
+        return self.alpha * (x-mean) / (std + self.eps) + self.bias
 
 # Creating Feed Forward Layers
 class FeedForwardBlock(nn.Module):
@@ -81,10 +79,7 @@ class FeedForwardBlock(nn.Module):
 
     def forward(self, x):
         # (Batch, seq_len, d_model) --> (batch, seq_len, d_ff) -->(batch, seq_len, d_model)
-        if MI_TRANSFORMER:
-          return self.dropout(self.linear_2(torch.relu(self.linear_1(x))))
-        # else:
-          return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
+        return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
 
 # Creating the Multi-Head Attention block
 class MultiHeadAttentionBlock(nn.Module):
@@ -155,9 +150,6 @@ class ResidualConnection(nn.Module):
         self.norm = LayerNormalization() # We use a normalization layer
 
     def forward(self, x, sublayer):
-      if MI_TRANSFORMER:
-        return x + sublayer(self.norm(x))
-      else:
         # We normalize the input and add it to the original input 'x'. This creates the residual connection process.
         return x + self.dropout(sublayer(self.norm(x)))
 
@@ -195,10 +187,7 @@ class Encoder(nn.Module):
         # Iterating over each EncoderBlock stored in self.layers
         for layer in self.layers:
             x = layer(x, mask) # Applying each EncoderBlock to the input tensor 'x'
-        if MI_TRANSFORMER:
-          return x
-        else:
-          return self.norm(x) # Normalizing output
+        return self.norm(x) # Normalizing output
 
 # Building Decoder Block
 class DecoderBlock(nn.Module):
@@ -242,10 +231,7 @@ class Decoder(nn.Module):
         for layer in self.layers:
             # Applies each DecoderBlock to the input 'x' plus the encoder output and source and target masks
             x = layer(x, encoder_output, src_mask, tgt_mask)
-        if MI_TRANSFORMER:
-          return x
-        else:
-          return self.norm(x) # Returns normalized output
+        return self.norm(x) # Returns normalized output
 
 # Buiding Linear Layer
 class ProjectionLayer(nn.Module):
@@ -274,7 +260,10 @@ class Transformer(nn.Module):
     def encode(self, src, src_mask):
         src = self.src_embed(src) # Applying source embeddings to the input source language
         src = self.src_pos(src) # Applying source positional encoding to the source embeddings
-        return self.encoder(src, src_mask) # Returning the source embeddings plus a source mask to prevent attention to certain elements
+        if MI_ENCODER:
+            return self.encoder(src)
+        else:
+            return self.encoder(src, src_mask) # Returning the source embeddings plus a source mask to prevent attention to certain elements
 
     # Decoder
     def decode(self, encoder_output, src_mask, tgt, tgt_mask):
@@ -283,7 +272,10 @@ class Transformer(nn.Module):
 
         # Returning the target embeddings, the output of the encoder, and both source and target masks
         # The target mask ensures that the model won't 'see' future elements of the sequence
-        return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
+        if MI_DECODER:
+            return self.decoder(tgt, encoder_output, tgt_mask)
+        else:
+            return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
 
     # Applying Projection Layer with the Softmax function to the Decoder output
     def project(self, x):
@@ -324,8 +316,19 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
         decoder_blocks.append(decoder_block) # Appending DecoderBlock to the list of DecoderBlocks
 
     # Creating the Encoder and Decoder by using the EncoderBlocks and DecoderBlocks lists
-    encoder = Encoder(nn.ModuleList(encoder_blocks))
-    decoder = Decoder(nn.ModuleList(decoder_blocks))
+    if MI_ENCODER:
+        heads = h
+        dim_embedding = d_model
+        Nx = N
+        prob_dropout = dropout
+        encoder = MiEncoder(heads, dim_embedding, Nx, prob_dropout)
+    else:
+        encoder = Encoder(nn.ModuleList(encoder_blocks))
+    if MI_DECODER:
+        heads, dim_embedding, Nx, prob_dropout = h, d_model, N, dropout
+        decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
+    else:
+        decoder = Decoder(nn.ModuleList(decoder_blocks))
 
     # Creating projection layer
     projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space
@@ -354,16 +357,19 @@ def get_model(vocab_src_len, vocab_tgt_len, src_seq_len, tgt_seq_len, d_model, N
     h = h
     dropout = dropout
     d_ff = d_ff
-    model = build_transformer(
-        src_vocab_size=src_vocab_size, 
-        tgt_vocab_size=tgt_vocab_size, 
-        src_seq_len=src_seq_len, 
-        tgt_seq_len=tgt_seq_len, 
-        d_model=d_model,
-        N=Nx,
-        h=h,
-        dropout=dropout,
-        d_ff=d_ff,
-    )
+    if MI_TRANSFORMER:
+        model = MiTransformer(src_vocab_size, tgt_vocab_size, src_seq_len, src_seq_len, d_model, Nx, h, dropout)
+    else:
+        model = build_transformer(
+            src_vocab_size=src_vocab_size, 
+            tgt_vocab_size=tgt_vocab_size, 
+            src_seq_len=src_seq_len, 
+            tgt_seq_len=tgt_seq_len, 
+            d_model=d_model,
+            N=Nx,
+            h=h,
+            dropout=dropout,
+            d_ff=d_ff,
+        )
     return model
 

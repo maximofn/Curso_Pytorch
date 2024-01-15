@@ -21,7 +21,26 @@ from typing import Any
 # Library for progress bars in loops
 from tqdm import tqdm
 
-from transformer_internet import get_model
+from transformer_internet import get_model, MI_TRANSFORMER
+
+SUBSET = False
+SUBSET_ONE_SAMPLE = False
+PERCENT_SUBSET = 0.01
+LEN_SUBSET_ONE_SAMPLE = 1
+
+if SUBSET:
+    BS = 44
+    if SUBSET_ONE_SAMPLE:
+        BS = 1
+else:
+    BS = 20
+
+SOURCE_LANGUAGE = 'en'
+TARGET_LANGUAGE = 'es'
+EPOCHS = 200
+LR = 10**-4
+MAX_SECUENCE_LEN = 350
+DIM_EMBEDDING = 512
 
 # Defining Tokenizer
 def build_tokenizer(config, ds, lang):
@@ -43,7 +62,7 @@ def build_tokenizer(config, ds, lang):
 
         # Training new tokenizer on sentences from the dataset and language specified
         tokenizer.train_from_iterator(get_all_sentences(ds, lang), trainer = trainer)
-        tokenizer.save(str(tokenizer_path)) # Saving trained tokenizer to the file path specified at the beginning of the function
+        # tokenizer.save(str(tokenizer_path)) # Saving trained tokenizer to the file path specified at the beginning of the function
     else:
         tokenizer = Tokenizer.from_file(str(tokenizer_path)) # If the tokenizer already exist, we load it
     return tokenizer # Returns the loaded tokenizer or the trained tokenizer
@@ -59,6 +78,13 @@ def get_ds(config):
     # The Language pairs will be defined in the 'config' dictionary we will build later
     ds_raw = load_dataset('opus_books', f'{config["lang_src"]}-{config["lang_tgt"]}', split = 'train')
 
+    if SUBSET:
+      if SUBSET_ONE_SAMPLE:
+            ds_raw = ds_raw.select(range(LEN_SUBSET_ONE_SAMPLE))
+      else:
+            ds_raw = ds_raw.select(range(int(PERCENT_SUBSET*len(ds_raw))))
+    print(f'Number of examples in the dataset: {len(ds_raw)}')
+
     # Building or loading tokenizer for both the source and target languages
     tokenizer_src = build_tokenizer(config, ds_raw, config['lang_src'])
     tokenizer_tgt = build_tokenizer(config, ds_raw, config['lang_tgt'])
@@ -66,7 +92,11 @@ def get_ds(config):
     # Splitting the dataset for training and validation
     train_ds_size = int(0.9 * len(ds_raw)) # 90% for training
     val_ds_size = len(ds_raw) - train_ds_size # 10% for validation
-    train_ds_raw, val_ds_raw = random_split(ds_raw, [train_ds_size, val_ds_size]) # Randomly splitting the dataset
+    if SUBSET_ONE_SAMPLE:
+        train_ds_raw = ds_raw.select(range(LEN_SUBSET_ONE_SAMPLE))
+        val_ds_raw = train_ds_raw
+    else:
+        train_ds_raw, val_ds_raw = random_split(ds_raw, [train_ds_size, val_ds_size]) # Randomly splitting the dataset
 
     # Processing data with the BilingualDataset class, which we will define below
     train_ds = BilingualDataset(train_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
@@ -130,6 +160,10 @@ class BilingualDataset(Dataset):
         enc_input_tokens = self.tokenizer_src.encode(src_text).ids
         dec_input_tokens = self.tokenizer_tgt.encode(tgt_text).ids
 
+        # Truncating or padding the tokenized texts to the defined 'seq_len'
+        enc_input_tokens = enc_input_tokens[:self.seq_len-2]
+        dec_input_tokens = dec_input_tokens[:self.seq_len-1]
+
         # Computing how many padding tokens need to be added to the tokenized texts
         # Source tokens
         enc_num_padding_tokens = self.seq_len - len(enc_input_tokens) - 2 # Subtracting the two '[EOS]' and '[SOS]' special tokens
@@ -177,23 +211,29 @@ class BilingualDataset(Dataset):
         assert label.size(0) == self.seq_len
 
         return {
-            'encoder_input': encoder_input,
-            'decoder_input': decoder_input,
+            'input_to_encoder_tokeniced': encoder_input,
+            'input_to_decoder_tokeniced': decoder_input,
             'encoder_mask': (encoder_input != self.pad_token).unsqueeze(0).unsqueeze(0).int(),
             'decoder_mask': (decoder_input != self.pad_token).unsqueeze(0).unsqueeze(0).int() & casual_mask(decoder_input.size(0)),
-            'label': label,
+            'target_to_decoder_tokeniced': label,
             'src_text': src_text,
             'tgt_text': tgt_text
         }
     
 # Define function to obtain the most probable next token
 def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_len, device):
+    debug = False
     # Retrieving the indices from the start and end of sequences of the target tokens
     sos_idx = tokenizer_tgt.token_to_id('[SOS]')
     eos_idx = tokenizer_tgt.token_to_id('[EOS]')
 
     # Computing the output of the encoder for the source sequence
-    encoder_output = model.encode(source, source_mask)
+    if MI_TRANSFORMER:
+        encoder_output = model.encode(source)
+    else:
+        encoder_output = model.encode(source, source_mask)
+    if debug: print('*'*80)
+    if debug: print(f"encoder_output shape: {encoder_output.shape} (1, max_seq_len, dim_embedding) = (1, 350, 512)") # (1, max_seq_len, dim_embedding) = (1, 350, 512)
     # Initializing the decoder input with the Start of Sentence token
     decoder_input = torch.empty(1,1).fill_(sos_idx).type_as(source).to(device)
 
@@ -206,10 +246,19 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
         decoder_mask = casual_mask(decoder_input.size(1)).type_as(source_mask).to(device)
 
         # Calculating the output of the decoder
-        out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+        if MI_TRANSFORMER:
+            out = model.decode_without_linear_and_softmax(decoder_input, encoder_output, decoder_mask)
+        else:
+            out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+        if debug: print(f"\tout shape: {out.shape} (1, seq_len, dim_embedding) = (1, seq_len, 512)") # (1, seq_len, dim_embedding) = (1, seq_len, 512)
 
         # Applying the projection layer to get the probabilities for the next token
-        prob = model.project(out[:, -1])
+        if MI_TRANSFORMER:
+            prob = model.linear_and_softmax(out[:, -1])
+        else:
+            prob = model.project(out[:, -1])
+        if debug: print(f"\tprob shape: {prob.shape} (1, target_vocab_size)") # (1, target_vocab_size)
+        if debug: print('*'*80)
 
         # Selecting token with the highest probability
         _, next_word = torch.max(prob, dim=1)
@@ -233,14 +282,14 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
     with torch.no_grad(): # Ensuring that no gradients are computed during this process
         for batch in validation_ds:
             count += 1
-            encoder_input = batch['encoder_input'].to(device)
+            input_to_encoder_tokeniced = batch['input_to_encoder_tokeniced'].to(device)
             encoder_mask = batch['encoder_mask'].to(device)
 
             # Ensuring that the batch_size of the validation set is 1
-            assert encoder_input.size(0) ==  1, 'Batch size must be 1 for validation.'
+            assert input_to_encoder_tokeniced.size(0) ==  1, 'Batch size must be 1 for validation.'
 
             # Applying the 'greedy_decode' function to get the model's output for the source text of the input batch
-            model_out = greedy_decode(model, encoder_input, encoder_mask, tokenizer_src, tokenizer_tgt, max_len, device)
+            model_out = greedy_decode(model, input_to_encoder_tokeniced, encoder_mask, tokenizer_src, tokenizer_tgt, max_len, device)
 
             # Retrieving source and target texts from the batch
             source_text = batch['src_text'][0]
@@ -252,6 +301,7 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
             print_msg(f'SOURCE: {source_text}')
             print_msg(f'TARGET: {target_text}')
             print_msg(f'PREDICTED: {model_out_text}')
+            # print(f"model_out shape: {model_out.shape}, model_out: {model_out}")
 
             # After two examples, we break the loop
             if count == num_examples:
@@ -260,13 +310,13 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
 # Define settings for building and training the transformer model
 def get_config():
     return{
-        'batch_size': 8,
-        'num_epochs': 20,
-        'lr': 10**-4,
-        'seq_len': 350,
-        'd_model': 512, # Dimensions of the embeddings in the Transformer. 512 like in the "Attention Is All You Need" paper.
-        'lang_src': 'en',
-        'lang_tgt': 'it',
+        'batch_size':BS,
+        'num_epochs': EPOCHS,
+        'lr': LR,
+        'seq_len': MAX_SECUENCE_LEN,
+        'd_model': DIM_EMBEDDING,
+        'lang_src': SOURCE_LANGUAGE,
+        'lang_tgt': TARGET_LANGUAGE,
         'model_folder': 'model',
         'model_basename': 'tmodel_',
         'preload': None,
@@ -292,6 +342,22 @@ def train_model(config):
     # Retrieving dataloaders and tokenizers for source and target languages using the 'get_ds' function
     train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
 
+    sample_batch = next(iter(train_dataloader))
+    print('*'*80)
+    print(f"Input to encoder tokeniced shape: {sample_batch['input_to_encoder_tokeniced'].shape} (batch_size, seq_len)")  # (batch_size, seq_len)
+    print(f"Input to encoder tokeniced dtype: {sample_batch['input_to_encoder_tokeniced'].dtype}")
+    print(f"Input to decoder tokeniced shape: {sample_batch['input_to_decoder_tokeniced'].shape} (batch_size, seq_len)")  # (batch_size, seq_len)
+    print(f"Input to decoder tokeniced dtype: {sample_batch['input_to_decoder_tokeniced'].dtype}")
+    print(f"Encoder mask shape: {sample_batch['encoder_mask'].shape} (batch_size, 1, 1, seq_len)")                        # (batch_size, 1, 1, seq_len)
+    print(f"Encoder mask dtype: {sample_batch['encoder_mask'].dtype}")
+    print(f"Decoder mask shape: {sample_batch['decoder_mask'].shape} (batch_size, 1, seq_len, seq_len)")                  # (batch_size, 1, seq_len, seq_len)
+    print(f"Decoder mask dtype: {sample_batch['decoder_mask'].dtype}")
+    print(f"Target to decoder tokeniced shape: {sample_batch['target_to_decoder_tokeniced'].shape} (batch_size, seq_len)")# (batch_size, seq_len)
+    print(f"Target to decoder tokeniced dtype: {sample_batch['target_to_decoder_tokeniced'].dtype}")
+    print(f"Source text example:\n{sample_batch['src_text'][0]}")
+    print(f"Target text example:\n{sample_batch['tgt_text'][0]}")
+    print('*'*80)
+
     # Initializing model on the GPU using the 'get_model' function
     src_vocab_size = tokenizer_src.get_vocab_size()
     tgt_vocab_size = tokenizer_tgt.get_vocab_size()
@@ -300,13 +366,16 @@ def train_model(config):
     dim_embedding = config['d_model']
     print(f'Embedding dimension: {dim_embedding}')
     src_seq_len = config['seq_len']
-    print(f'Source sequence length: {src_seq_len}')
+    print(f'Source max sequence length: {src_seq_len}')
     tgt_seq_len = config['seq_len']
-    print(f'Target sequence length: {tgt_seq_len}')
+    print(f'Target max sequence length: {tgt_seq_len}')
     Nx = 6 #Nx,
     h = 8 #config['h']
     dropout = 0.1 #config['dropout']
     d_ff = 2048 #config['d_ff']
+    print(f"Nx: {Nx}, h: {h}, dropout: {dropout}, d_ff: {d_ff}")
+    print(f"SOS token id: {tokenizer_tgt.token_to_id('[SOS]')}, EOS token id: {tokenizer_tgt.token_to_id('[EOS]')}, PAD token id: {tokenizer_tgt.token_to_id('[PAD]')}, UNK token id: {tokenizer_tgt.token_to_id('[UNK]')}")
+    print('*'*80)
     model = get_model(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, dim_embedding, Nx, h, dropout, d_ff).to(device)
 
     # Tensorboard
@@ -354,18 +423,21 @@ def train_model(config):
             model.train() # Train the model
 
             # Loading input data and masks onto the GPU
-            encoder_input = batch['encoder_input'].to(device)
-            decoder_input = batch['decoder_input'].to(device)
+            input_to_encoder_tokeniced = batch['input_to_encoder_tokeniced'].to(device)
+            input_to_decoder_tokeniced = batch['input_to_decoder_tokeniced'].to(device)
             encoder_mask = batch['encoder_mask'].to(device)
             decoder_mask = batch['decoder_mask'].to(device)
 
             # Running tensors through the Transformer
-            encoder_output = model.encode(encoder_input, encoder_mask)
-            decoder_output = model.decode(encoder_output, encoder_mask, decoder_input, decoder_mask)
-            proj_output = model.project(decoder_output)
-
+            if MI_TRANSFORMER:
+                proj_output = model(input_to_encoder_tokeniced, input_to_decoder_tokeniced, decoder_mask)
+            else:
+                encoder_output = model.encode(input_to_encoder_tokeniced, encoder_mask)
+                decoder_output = model.decode(encoder_output=encoder_output, src_mask=encoder_mask, tgt=input_to_decoder_tokeniced, tgt_mask=decoder_mask)
+                proj_output = model.project(decoder_output)
+            
             # Loading the target labels onto the GPU
-            label = batch['label'].to(device)
+            label = batch['target_to_decoder_tokeniced'].to(device)
 
             # Computing loss between model's output and true labels
             loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))

@@ -23,22 +23,22 @@ from tqdm import tqdm
 
 from transformer_internet import get_model, MI_TRANSFORMER
 
-SUBSET = False
+SUBSET = True
 SUBSET_ONE_SAMPLE = False
-PERCENT_SUBSET = 0.01
+PERCENT_SUBSET = 0.005
 LEN_SUBSET_ONE_SAMPLE = 1
 
 if SUBSET:
-    BS = 44
+    BS = 40
     if SUBSET_ONE_SAMPLE:
         BS = 1
 else:
-    BS = 20
+    BS = 16
 
 SOURCE_LANGUAGE = 'en'
 TARGET_LANGUAGE = 'es'
 EPOCHS = 200
-LR = 10**-4
+LR = 10**-5
 MAX_SECUENCE_LEN = 350
 DIM_EMBEDDING = 512
 
@@ -247,7 +247,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
 
         # Calculating the output of the decoder
         if MI_TRANSFORMER:
-            out = model.decode_without_linear_and_softmax(decoder_input, encoder_output, decoder_mask)
+            out = model.decode(decoder_input, encoder_output, decoder_mask)
         else:
             out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
         if debug: print(f"\tout shape: {out.shape} (1, seq_len, dim_embedding) = (1, seq_len, 512)") # (1, seq_len, dim_embedding) = (1, seq_len, 512)
@@ -430,7 +430,9 @@ def train_model(config):
 
             # Running tensors through the Transformer
             if MI_TRANSFORMER:
-                proj_output = model(input_to_encoder_tokeniced, input_to_decoder_tokeniced, decoder_mask)
+                encoder_output = model.encode(input_to_encoder_tokeniced)
+                decoder_output = model.decode(input_to_decoder_tokeniced, encoder_output, decoder_mask)
+                proj_output = model.linear_and_softmax(decoder_output)
             else:
                 encoder_output = model.encode(input_to_encoder_tokeniced, encoder_mask)
                 decoder_output = model.decode(encoder_output=encoder_output, src_mask=encoder_mask, tgt=input_to_decoder_tokeniced, tgt_mask=decoder_mask)
@@ -463,15 +465,15 @@ def train_model(config):
         # to evaluate model performance
         run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step)
 
-        # Saving model
-        model_filename = get_weights_file_path(config, f'{epoch:02d}')
-        # Writting current model state to the 'model_filename'
-        torch.save({
-            'epoch': epoch, # Current epoch
-            'model_state_dict': model.state_dict(),# Current model state
-            'optimizer_state_dict': optimizer.state_dict(), # Current optimizer state
-            'global_step': global_step # Current global step
-        }, model_filename)
+        # # Saving model
+        # model_filename = get_weights_file_path(config, f'{epoch:02d}')
+        # # Writting current model state to the 'model_filename'
+        # torch.save({
+        #     'epoch': epoch, # Current epoch
+        #     'model_state_dict': model.state_dict(),# Current model state
+        #     'optimizer_state_dict': optimizer.state_dict(), # Current optimizer state
+        #     'global_step': global_step # Current global step
+        # }, model_filename)
 
 config = get_config() # Retrieving config settings
 

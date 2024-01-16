@@ -1,5 +1,9 @@
 # Instalar mientras se crea el entorno
-mamba create -y -n cursopytorch -c anaconda -c conda-forge -c huggingface ipykernel numpy matplotlib gitpython pandas scikit-image scikit-learn=1.1 fastprogress opencv transformers datasets ipywidgets tiktoken
+mamba create -y -n cursopytorch -c anaconda -c conda-forge -c huggingface ipykernel numpy matplotlib gitpython pandas scikit-image scikit-learn=1.1 fastprogress opencv transformers datasets ipywidgets tiktoken sacrebleu nltk
+
+pip install tensorboard
+
+pip install rouge
 
 conda activate cursopytorch
 
@@ -10,9 +14,13 @@ conda create -y -n cursopytorch python=3.8
 
 conda activate cursopytorch
 
-mamba install -y -c anaconda -c conda-forge -c fastai -c huggingface ipykernel numpy matplotlib gitpython pandas scikit-image scikit-learn=1.1 fastprogress opencv transformers datasets ipywidgets tiktoken
+mamba install -y -c anaconda -c conda-forge -c fastai -c huggingface ipykernel numpy matplotlib gitpython pandas scikit-image scikit-learn=1.1 fastprogress opencv transformers datasets ipywidgets tiktoken sacrebleu nltk
 
 mamba install -y pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+
+pip install tensorboard
+
+pip install rouge
 
 # Crear el entorno e instalar uno a uno
 conda install -y -c conda-forge mamba
@@ -50,3 +58,11 @@ mamba install -y -c anaconda ipywidgets
 pip install tiktoken
 
 mamba install -y -c conda-forge onnx
+
+mamba install -y -c conda-forge sacrebleu
+
+mamba install -y nltk
+
+pip install tensorboard
+
+pip install rouge

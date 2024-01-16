@@ -22,3 +22,4 @@ Apuntes
 05 Transformers/**/*.pth
 05 Transformers/**/*.npy
 05 Transformers/__pycache__
+05 Transformers/model/*

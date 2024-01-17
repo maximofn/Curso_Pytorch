@@ -12,6 +12,7 @@ from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax
 MI_TRANSFORMER = False
 MI_ENCODER = True
 MI_DECODER = True
+MI_PROJECTION = True
 DOS_TRANSFORMERS = False
 
 # Creating Input Embeddings
@@ -346,7 +347,7 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
             decoder = Decoder(nn.ModuleList(decoder_blocks))
 
     # Creating projection layer
-    if MI_TRANSFORMER:
+    if MI_PROJECTION:
         projection_layer = Linear_and_softmax(d_model, tgt_vocab_size)
     else:
         projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space

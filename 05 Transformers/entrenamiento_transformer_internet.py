@@ -349,7 +349,7 @@ def train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, ba
 
 # Defining function to evaluate the model on the validation dataset
 # num_examples = 2, two examples per run
-def validation_loop(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, global_state, num_examples=2):
+def validation_loop(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, num_examples=2):
     model.eval() # Setting model to evaluation mode
     count = 0 # Initializing counter to keep track of how many examples have been processed
 
@@ -375,8 +375,8 @@ def validation_loop(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len,
 
             # Printing results
             print_msg('-'*console_width)
-            print_msg(f'SOURCE: {source_text}')
-            print_msg(f'TARGET: {target_text}')
+            print_msg(f'SOURCE EXAMPLE {count}: {source_text}')
+            print_msg(f'TARGET EXAMPLE {count}: {target_text}')
             print_msg(f'PREDICTED: {model_out_text}')
             # print(f"model_out shape: {model_out.shape}, model_out: {model_out}")
 
@@ -460,7 +460,7 @@ def train_model(config):
 
         # We run the 'validation_loop' function at the end of each epoch
         # to evaluate model performance
-        validation_loop(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step)
+        validation_loop(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg))
 
 config = get_config() # Retrieving config settings
 

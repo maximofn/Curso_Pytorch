@@ -338,6 +338,52 @@ def get_config():
         'tokenizer_file': 'tokenizer_{0}.json',
     }
 
+def train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, batch_iterator):
+    # For each batch...
+    for batch in batch_iterator:
+        model.train() # Train the model
+
+        # Loading input data and masks onto the GPU
+        input_to_encoder_tokeniced = batch['input_to_encoder_tokeniced'].to(device)
+        input_to_decoder_tokeniced = batch['input_to_decoder_tokeniced'].to(device)
+        encoder_mask = batch['encoder_mask'].to(device)
+        decoder_mask = batch['decoder_mask'].to(device)
+
+        # Running tensors through the Transformer
+        if MI_TRANSFORMER:
+            encoder_output = model.encode(input_to_encoder_tokeniced)
+            decoder_output = model.decode(input_to_decoder_tokeniced, encoder_output, decoder_mask)
+            proj_output = model.linear_and_softmax(decoder_output)
+        else:
+            encoder_output = model.encode(input_to_encoder_tokeniced, encoder_mask)
+            decoder_output = model.decode(encoder_output=encoder_output, src_mask=encoder_mask, tgt=input_to_decoder_tokeniced, tgt_mask=decoder_mask)
+            proj_output = model.project(decoder_output)
+        
+        # Loading the target labels onto the GPU
+        label = batch['target_to_decoder_tokeniced'].to(device)
+
+        # Computing loss between model's output and true labels
+        loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
+
+        # Updating progress bar
+        batch_iterator.set_postfix({f"loss": f"{loss.item():6.3f}"})
+
+        # writer.add_scalar('train loss', loss.item(), global_step)
+        # writer.flush()
+
+        # Performing backpropagation
+        loss.backward()
+
+        # Updating parameters based on the gradients
+        optimizer.step()
+
+        # Clearing the gradients to prepare for the next batch
+        optimizer.zero_grad()
+
+        global_step += 1 # Updating global step count
+
+    return global_step, model, optimizer
+
 def train_model(config):
     # Setting up device to run on GPU to train faster
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -405,48 +451,7 @@ def train_model(config):
         # We also use tqdm to display a progress bar
         batch_iterator = tqdm(train_dataloader, desc = f'Processing epoch {epoch:02d}')
 
-        # For each batch...
-        for batch in batch_iterator:
-            model.train() # Train the model
-
-            # Loading input data and masks onto the GPU
-            input_to_encoder_tokeniced = batch['input_to_encoder_tokeniced'].to(device)
-            input_to_decoder_tokeniced = batch['input_to_decoder_tokeniced'].to(device)
-            encoder_mask = batch['encoder_mask'].to(device)
-            decoder_mask = batch['decoder_mask'].to(device)
-
-            # Running tensors through the Transformer
-            if MI_TRANSFORMER:
-                encoder_output = model.encode(input_to_encoder_tokeniced)
-                decoder_output = model.decode(input_to_decoder_tokeniced, encoder_output, decoder_mask)
-                proj_output = model.linear_and_softmax(decoder_output)
-            else:
-                encoder_output = model.encode(input_to_encoder_tokeniced, encoder_mask)
-                decoder_output = model.decode(encoder_output=encoder_output, src_mask=encoder_mask, tgt=input_to_decoder_tokeniced, tgt_mask=decoder_mask)
-                proj_output = model.project(decoder_output)
-            
-            # Loading the target labels onto the GPU
-            label = batch['target_to_decoder_tokeniced'].to(device)
-
-            # Computing loss between model's output and true labels
-            loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
-
-            # Updating progress bar
-            batch_iterator.set_postfix({f"loss": f"{loss.item():6.3f}"})
-
-            # writer.add_scalar('train loss', loss.item(), global_step)
-            # writer.flush()
-
-            # Performing backpropagation
-            loss.backward()
-
-            # Updating parameters based on the gradients
-            optimizer.step()
-
-            # Clearing the gradients to prepare for the next batch
-            optimizer.zero_grad()
-
-            global_step += 1 # Updating global step count
+        global_step, model, optimizer = train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, batch_iterator)
 
         # We run the 'run_validation' function at the end of each epoch
         # to evaluate model performance

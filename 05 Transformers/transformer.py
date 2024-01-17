@@ -249,11 +249,11 @@ class Linear_and_softmax(nn.Module):
     def __init__(self, dim_embedding, vocab_size):
         super().__init__()
         self.linear = CustomLinear(dim_embedding, vocab_size)
-        self.softmax = Softmax()
+        # self.softmax = Softmax()
     
     def forward(self, x):
         x = self.linear(x)
-        x = self.softmax(x)
+        # x = self.softmax(x)
         return x
 
 class MiTransformer(nn.Module):

@@ -10,7 +10,7 @@ import math
 from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax, MiEmbedding, MiPositionalEncoding
 
 MI_TRANSFORMER = False
-MI_EMBEDDINGS = False
+MI_EMBEDDINGS = True
 MI_POSITIONAL_ENCODING = True
 MI_ENCODER = True
 MI_DECODER = True
@@ -292,8 +292,8 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
     
     # Creating Embedding layers
     if MI_EMBEDDINGS:
-        src_embed = MiEmbedding(d_model, src_vocab_size)
-        tgt_embed = MiEmbedding(d_model, tgt_vocab_size)
+        src_embed = MiEmbedding(src_vocab_size, d_model)
+        tgt_embed = MiEmbedding(tgt_vocab_size, d_model)
     else:
         src_embed = InputEmbeddings(d_model, src_vocab_size) # Source language (Source Vocabulary to 512-dimensional vectors)
         tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)

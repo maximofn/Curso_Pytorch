@@ -245,6 +245,17 @@ class TransformerDecoder(nn.Module):
         x = self.softmax(x)
         return x
 
+class Linear_and_softmax(nn.Module):
+    def __init__(self, dim_embedding, vocab_size):
+        super().__init__()
+        self.linear = CustomLinear(dim_embedding, vocab_size)
+        self.softmax = Softmax()
+    
+    def forward(self, x):
+        x = self.linear(x)
+        x = self.softmax(x)
+        return x
+
 class MiTransformer(nn.Module):
     def __init__(self, src_vocab_size, tgt_vocab_size, src_max_seq_len, tgt_max_seq_len, dim_embedding, Nx, heads, prob_dropout=0.1, dim_feedforward=2048):
         super().__init__()
@@ -287,3 +298,25 @@ class MiTransformer(nn.Module):
         decoder_output = self.decoder(target, encoder_output, mask)
         return decoder_output
 
+class LegoTransformer(nn.Module):
+    def __init__(self, encoder: MiEncoder, decoder: MiDecoder, src_embed: MiEmbedding, tgt_embed: MiEmbedding, src_pos: MiPositionalEncoding, tgt_pos: MiPositionalEncoding, linear_and_softmax: Linear_and_softmax) -> None:
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.src_embed = src_embed
+        self.tgt_embed = tgt_embed
+        self.src_pos = src_pos
+        self.tgt_pos = tgt_pos
+        self.linear_and_softmax = linear_and_softmax
+    
+    def encode(self, source):
+        embedding = self.src_embed(source)
+        positional_encoding = self.src_pos(embedding)
+        encoder_output = self.encoder(positional_encoding)
+        return encoder_output
+    
+    def decode(self, target, encoder_output, target_mask):
+        embedding = self.tgt_embed(target)
+        positional_encoding = self.tgt_pos(embedding)
+        decoder_output = self.decoder(positional_encoding, encoder_output, target_mask)
+        return decoder_output

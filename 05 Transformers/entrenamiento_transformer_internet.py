@@ -384,14 +384,7 @@ def validation_loop(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len,
             if count == num_examples:
                 break
 
-def train_model(config):
-    # Setting up device to run on GPU to train faster
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device {device}")
-
-    # Retrieving dataloaders and tokenizers for source and target languages using the 'get_ds' function
-    train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
-
+def debug_one_sample_of_dataloder(train_dataloader):
     sample_batch = next(iter(train_dataloader))
     print('*'*80)
     print(f"Input to encoder tokeniced shape: {sample_batch['input_to_encoder_tokeniced'].shape} (batch_size, seq_len)")  # (batch_size, seq_len)
@@ -407,6 +400,17 @@ def train_model(config):
     print(f"Source text example:\n{sample_batch['src_text'][0]}")
     print(f"Target text example:\n{sample_batch['tgt_text'][0]}")
     print('*'*80)
+
+def train_model(config):
+    # Setting up device to run on GPU to train faster
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device {device}")
+
+    # Retrieving dataloaders and tokenizers for source and target languages using the 'get_ds' function
+    train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
+
+    # Debugging one sample of the dataloader
+    debug_one_sample_of_dataloder(train_dataloader)
 
     # Initializing model on the GPU using the 'get_model' function
     src_vocab_size = tokenizer_src.get_vocab_size()
@@ -451,6 +455,7 @@ def train_model(config):
         # We also use tqdm to display a progress bar
         batch_iterator = tqdm(train_dataloader, desc = f'Processing epoch {epoch:02d}')
 
+        # Running the training loop for one epoch
         global_step, model, optimizer = train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, batch_iterator)
 
         # We run the 'validation_loop' function at the end of each epoch

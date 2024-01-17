@@ -10,8 +10,8 @@ import math
 from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax
 
 MI_TRANSFORMER = False
-MI_ENCODER = False
-MI_DECODER = False
+MI_ENCODER = True
+MI_DECODER = True
 MI_PROJECTION = False
 DOS_TRANSFORMERS = False
 
@@ -341,8 +341,7 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
         }
     else:
         if MI_DECODER:
-            heads, dim_embedding, Nx, prob_dropout = h, d_model, N, dropout
-            decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
+            decoder = MiDecoder(h, d_model, N, dropout)
         else:
             decoder = Decoder(nn.ModuleList(decoder_blocks))
 

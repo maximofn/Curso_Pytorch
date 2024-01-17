@@ -247,7 +247,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
 
     # Computing the output of the encoder for the source sequence
     if MI_ENCODER:
-        encoder_output = model.encode(source)
+        encoder_output = model.encode(source, source_mask)
     else:
         encoder_output = model.encode(source, source_mask)
     if debug: print('*'*80)
@@ -265,14 +265,14 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
 
         # Calculating the output of the decoder
         if MI_DECODER:
-            out = model.decode(decoder_input, encoder_output, decoder_mask)
+            out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
         else:
             out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
         if debug: print(f"\tout shape: {out.shape} (1, seq_len, dim_embedding) = (1, seq_len, 512)") # (1, seq_len, dim_embedding) = (1, seq_len, 512)
 
         # Applying the projection layer to get the probabilities for the next token
         if MI_PROJECTION:
-            prob = model.linear_and_softmax(out[:, -1])
+            prob = model.project(out[:, -1])
         else:
             prob = model.project(out[:, -1])
         if debug: print(f"\tprob shape: {prob.shape} (1, target_vocab_size)") # (1, target_vocab_size)

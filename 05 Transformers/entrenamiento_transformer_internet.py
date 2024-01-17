@@ -25,11 +25,26 @@ from transformer_internet import get_model, MI_TRANSFORMER, MI_ENCODER, MI_DECOD
 
 SUBSET = True
 SUBSET_ONE_SAMPLE = False
-PERCENT_SUBSET = 0.005
+PERCENT_SUBSET = 0.01
 LEN_SUBSET_ONE_SAMPLE = 1
 
 if SUBSET:
-    BS = 40
+    if MI_ENCODER and MI_DECODER and MI_PROJECTION:
+        BS = 40
+    elif MI_ENCODER and MI_DECODER:
+        BS = 32
+    elif MI_ENCODER and MI_PROJECTION:
+        BS = 32
+    elif MI_DECODER and MI_PROJECTION:
+        BS = 32
+    elif MI_ENCODER:
+        BS = 24
+    elif MI_DECODER:
+        BS = 24
+    elif MI_PROJECTION:
+        BS = 24
+    else:
+        BS = 24
     if SUBSET_ONE_SAMPLE:
         BS = 1
 else:
@@ -41,7 +56,7 @@ EPOCHS = 200
 if MI_ENCODER and MI_DECODER and MI_PROJECTION:
     LR = 10**-6
 else:
-    LR = 10**-5
+    LR = 10**-4
 MAX_SECUENCE_LEN = 350
 DIM_EMBEDDING = 512
 

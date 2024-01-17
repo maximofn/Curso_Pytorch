@@ -7,11 +7,12 @@ import torch.nn as nn
 # Math
 import math
 
-from transformer import MiTransformer, MiEncoder, MiDecoder
+from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax
 
 MI_TRANSFORMER = False
 MI_ENCODER = True
 MI_DECODER = True
+DOS_TRANSFORMERS = False
 
 # Creating Input Embeddings
 class InputEmbeddings(nn.Module):
@@ -316,22 +317,39 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
         decoder_blocks.append(decoder_block) # Appending DecoderBlock to the list of DecoderBlocks
 
     # Creating the Encoder and Decoder by using the EncoderBlocks and DecoderBlocks lists
-    if MI_ENCODER:
-        heads = h
-        dim_embedding = d_model
-        Nx = N
-        prob_dropout = dropout
-        encoder = MiEncoder(heads, dim_embedding, Nx, prob_dropout)
+    if DOS_TRANSFORMERS:
+        mi_encoder = MiEncoder(h, d_model, N, dropout)
+        encoder_internet = Encoder(nn.ModuleList(encoder_blocks))
+        encoder = {
+            'mi_encoder': mi_encoder,
+            'encoder_internet': encoder_internet,
+        }
     else:
-        encoder = Encoder(nn.ModuleList(encoder_blocks))
-    if MI_DECODER:
-        heads, dim_embedding, Nx, prob_dropout = h, d_model, N, dropout
-        decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
+        if MI_ENCODER:
+            encoder = MiEncoder(h, d_model, N, dropout)
+        else:
+            encoder = Encoder(nn.ModuleList(encoder_blocks))
+    
+    # Creating the Decoder
+    if DOS_TRANSFORMERS:
+        mi_decoder = MiDecoder(h, d_model, N, dropout)
+        decoder_internet = Decoder(nn.ModuleList(decoder_blocks))
+        decoder = {
+            'mi_decoder': mi_decoder,
+            'decoder_internet': decoder_internet,
+        }
     else:
-        decoder = Decoder(nn.ModuleList(decoder_blocks))
+        if MI_DECODER:
+            heads, dim_embedding, Nx, prob_dropout = h, d_model, N, dropout
+            decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
+        else:
+            decoder = Decoder(nn.ModuleList(decoder_blocks))
 
     # Creating projection layer
-    projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space
+    if MI_TRANSFORMER:
+        projection_layer = Linear_and_softmax(d_model, tgt_vocab_size)
+    else:
+        projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space
 
     # Creating the transformer by combining everything above
     transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection_layer)

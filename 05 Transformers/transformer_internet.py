@@ -7,9 +7,11 @@ import torch.nn as nn
 # Math
 import math
 
-from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax
+from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax, MiEmbedding, MiPositionalEncoding
 
 MI_TRANSFORMER = False
+MI_EMBEDDINGS = False
+MI_POSITIONAL_ENCODING = True
 MI_ENCODER = True
 MI_DECODER = True
 MI_PROJECTION = True
@@ -289,12 +291,20 @@ class Transformer(nn.Module):
 def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048) -> Transformer:
     
     # Creating Embedding layers
-    src_embed = InputEmbeddings(d_model, src_vocab_size) # Source language (Source Vocabulary to 512-dimensional vectors)
-    tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)
+    if MI_EMBEDDINGS:
+        src_embed = MiEmbedding(d_model, src_vocab_size)
+        tgt_embed = MiEmbedding(d_model, tgt_vocab_size)
+    else:
+        src_embed = InputEmbeddings(d_model, src_vocab_size) # Source language (Source Vocabulary to 512-dimensional vectors)
+        tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)
 
     # Creating Positional Encoding layers
-    src_pos = PositionalEncoding(d_model, src_seq_len, dropout) # Positional encoding for the source language embeddings
-    tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout) # Positional encoding for the target language embeddings
+    if MI_POSITIONAL_ENCODING:
+        src_pos = MiPositionalEncoding(max_sequence_len=src_seq_len, embedding_model_dim=d_model)
+        tgt_pos = MiPositionalEncoding(max_sequence_len=tgt_seq_len, embedding_model_dim=d_model)
+    else:
+        src_pos = PositionalEncoding(d_model, src_seq_len, dropout) # Positional encoding for the source language embeddings
+        tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout) # Positional encoding for the target language embeddings
 
     # Creating EncoderBlocks
     encoder_blocks = [] # Initial list of empty EncoderBlocks

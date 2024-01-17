@@ -323,13 +323,6 @@ def get_config():
         'experiment_name': 'runs/tmodel'
     }
 
-# Function to construct the path for saving and retrieving model weights
-def get_weights_file_path(config, epoch: str):
-    model_folder = config['model_folder'] # Extracting model folder from the config
-    model_basename = config['model_basename'] # Extracting the base name for model files
-    model_filename = f"{model_basename}{epoch}.pt" # Building filename
-    return str(Path('.')/ model_folder/ model_filename) # Combining current directory, the model folder, and the model filename
-
 def train_model(config):
     # Setting up device to run on GPU to train faster
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -449,16 +442,6 @@ def train_model(config):
         # We run the 'run_validation' function at the end of each epoch
         # to evaluate model performance
         run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step)
-
-        # # Saving model
-        # model_filename = get_weights_file_path(config, f'{epoch:02d}')
-        # # Writting current model state to the 'model_filename'
-        # torch.save({
-        #     'epoch': epoch, # Current epoch
-        #     'model_state_dict': model.state_dict(),# Current model state
-        #     'optimizer_state_dict': optimizer.state_dict(), # Current optimizer state
-        #     'global_step': global_step # Current global step
-        # }, model_filename)
 
 config = get_config() # Retrieving config settings
 

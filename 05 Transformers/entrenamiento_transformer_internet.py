@@ -21,7 +21,7 @@ from typing import Any
 # Library for progress bars in loops
 from tqdm import tqdm
 
-from transformer_internet import get_model, MI_TRANSFORMER, MI_ENCODER, MI_DECODER, MI_PROJECTION
+from transformer import MiTransformer
 
 SUBSET = True
 SUBSET_ONE_SAMPLE = False
@@ -29,22 +29,7 @@ PERCENT_SUBSET = 0.01
 LEN_SUBSET_ONE_SAMPLE = 1
 
 if SUBSET:
-    if MI_ENCODER and MI_DECODER and MI_PROJECTION:
-        BS = 40
-    elif MI_ENCODER and MI_DECODER:
-        BS = 32
-    elif MI_ENCODER and MI_PROJECTION:
-        BS = 32
-    elif MI_DECODER and MI_PROJECTION:
-        BS = 32
-    elif MI_ENCODER:
-        BS = 24
-    elif MI_DECODER:
-        BS = 24
-    elif MI_PROJECTION:
-        BS = 24
-    else:
-        BS = 24
+    BS = 40
     if SUBSET_ONE_SAMPLE:
         BS = 1
 else:
@@ -53,10 +38,7 @@ else:
 SOURCE_LANGUAGE = 'en'
 TARGET_LANGUAGE = 'es'
 EPOCHS = 200
-if MI_ENCODER and MI_DECODER and MI_PROJECTION:
-    LR = 10**-6
-else:
-    LR = 10**-4
+LR = 10**-6
 MAX_SECUENCE_LEN = 350
 DIM_EMBEDDING = 512
 
@@ -246,13 +228,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
     eos_idx = tokenizer_tgt.token_to_id('[EOS]')
 
     # Computing the output of the encoder for the source sequence
-    if MI_TRANSFORMER:
-        encoder_output = model.encode(source)
-    else:
-        if MI_ENCODER:
-            encoder_output = model.encode(source, source_mask)
-        else:
-            encoder_output = model.encode(source, source_mask)
+    encoder_output = model.encode(source)
     if debug: print('*'*80)
     if debug: print(f"encoder_output shape: {encoder_output.shape} (1, max_seq_len, dim_embedding) = (1, 350, 512)") # (1, max_seq_len, dim_embedding) = (1, 350, 512)
     # Initializing the decoder input with the Start of Sentence token
@@ -267,23 +243,11 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
         decoder_mask = casual_mask(decoder_input.size(1)).type_as(source_mask).to(device)
 
         # Calculating the output of the decoder
-        if MI_TRANSFORMER:
-            out = model.decode(decoder_input, encoder_output, decoder_mask)
-        else:
-            if MI_DECODER:
-                out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
-            else:
-                out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+        out = model.decode(decoder_input, encoder_output, decoder_mask)
         if debug: print(f"\tout shape: {out.shape} (1, seq_len, dim_embedding) = (1, seq_len, 512)") # (1, seq_len, dim_embedding) = (1, seq_len, 512)
 
         # Applying the projection layer to get the probabilities for the next token
-        if MI_TRANSFORMER:
-            prob = model.linear_and_softmax(out[:, -1])
-        else:
-            if MI_PROJECTION:
-                prob = model.project(out[:, -1])
-            else:
-                prob = model.project(out[:, -1])
+        prob = model.linear_and_softmax(out[:, -1])
         if debug: print(f"\tprob shape: {prob.shape} (1, target_vocab_size)") # (1, target_vocab_size)
         if debug: print('*'*80)
 
@@ -322,14 +286,9 @@ def train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, ba
         decoder_mask = batch['decoder_mask'].to(device)
 
         # Running tensors through the Transformer
-        if MI_TRANSFORMER:
-            encoder_output = model.encode(input_to_encoder_tokeniced)
-            decoder_output = model.decode(input_to_decoder_tokeniced, encoder_output, decoder_mask)
-            proj_output = model.linear_and_softmax(decoder_output)
-        else:
-            encoder_output = model.encode(input_to_encoder_tokeniced, encoder_mask)
-            decoder_output = model.decode(encoder_output=encoder_output, src_mask=encoder_mask, tgt=input_to_decoder_tokeniced, tgt_mask=decoder_mask)
-            proj_output = model.project(decoder_output)
+        encoder_output = model.encode(input_to_encoder_tokeniced)
+        decoder_output = model.decode(input_to_decoder_tokeniced, encoder_output, decoder_mask)
+        proj_output = model.linear_and_softmax(decoder_output)
         
         # Loading the target labels onto the GPU
         label = batch['target_to_decoder_tokeniced'].to(device)
@@ -387,7 +346,6 @@ def validation_loop(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len,
             print_msg(f'SOURCE EXAMPLE {count}: {source_text}')
             print_msg(f'TARGET EXAMPLE {count}: {target_text}')
             print_msg(f'PREDICTED: {model_out_text}')
-            # print(f"model_out shape: {model_out.shape}, model_out: {model_out}")
 
             # After two examples, we break the loop
             if count == num_examples:
@@ -439,7 +397,8 @@ def train_model(config):
     print(f"Nx: {Nx}, h: {h}, dropout: {dropout}, d_ff: {d_ff}")
     print(f"SOS token id: {tokenizer_tgt.token_to_id('[SOS]')}, EOS token id: {tokenizer_tgt.token_to_id('[EOS]')}, PAD token id: {tokenizer_tgt.token_to_id('[PAD]')}, UNK token id: {tokenizer_tgt.token_to_id('[UNK]')}")
     print('*'*80)
-    model = get_model(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, dim_embedding, Nx, h, dropout, d_ff).to(device)
+    # model = get_model(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, dim_embedding, Nx, h, dropout, d_ff).to(device)
+    model = MiTransformer(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, dim_embedding, Nx, h, dropout, d_ff).to(device)
 
     # Setting up the Adam optimizer with the specified learning rate from the '
     # config' dictionary plus an epsilon value

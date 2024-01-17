@@ -319,7 +319,6 @@ def get_config():
         'lang_tgt': TARGET_LANGUAGE,
         'model_folder': 'model',
         'model_basename': 'tmodel_',
-        'preload': None,
         'tokenizer_file': 'tokenizer_{0}.json',
         'experiment_name': 'runs/tmodel'
     }
@@ -388,20 +387,6 @@ def train_model(config):
     # Initializing epoch and global step variables
     initial_epoch = 0
     global_step = 0
-
-    # Checking if there is a pre-trained model to load
-    # If true, loads it
-    if config['preload']:
-        model_filename = get_weights_file_path(config, config['preload'])
-        print(f'Preloading model {model_filename}')
-        state = torch.load(model_filename) # Loading model
-
-        # Sets epoch to the saved in the state plus one, to resume from where it stopped
-        initial_epoch = state['epoch'] + 1
-        # Loading the optimizer state from the saved model
-        optimizer.load_state_dict(state['optimizer_state_dict'])
-        # Loading the global step state from the saved model
-        global_step = state['global_step']
 
     # Initializing CrossEntropyLoss function for training
     # We ignore padding tokens when computing loss, as they are not relevant for the learning process

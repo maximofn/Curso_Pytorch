@@ -10,9 +10,9 @@ import math
 from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax
 
 MI_TRANSFORMER = False
-MI_ENCODER = True
-MI_DECODER = True
-MI_PROJECTION = True
+MI_ENCODER = False
+MI_DECODER = False
+MI_PROJECTION = False
 DOS_TRANSFORMERS = False
 
 # Creating Input Embeddings

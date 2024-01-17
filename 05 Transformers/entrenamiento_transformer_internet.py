@@ -21,7 +21,7 @@ from typing import Any
 # Library for progress bars in loops
 from tqdm import tqdm
 
-from transformer_internet import get_model, MI_TRANSFORMER
+from transformer_internet import get_model, MI_TRANSFORMER, MI_ENCODER, MI_DECODER, MI_PROJECTION
 
 SUBSET = True
 SUBSET_ONE_SAMPLE = False
@@ -38,7 +38,10 @@ else:
 SOURCE_LANGUAGE = 'en'
 TARGET_LANGUAGE = 'es'
 EPOCHS = 200
-LR = 10**-5
+if MI_ENCODER and MI_DECODER and MI_PROJECTION:
+    LR = 10**-6
+else:
+    LR = 10**-5
 MAX_SECUENCE_LEN = 350
 DIM_EMBEDDING = 512
 
@@ -317,19 +320,13 @@ def get_config():
         'd_model': DIM_EMBEDDING,
         'lang_src': SOURCE_LANGUAGE,
         'lang_tgt': TARGET_LANGUAGE,
-        'model_folder': 'model',
-        'model_basename': 'tmodel_',
         'tokenizer_file': 'tokenizer_{0}.json',
-        'experiment_name': 'runs/tmodel'
     }
 
 def train_model(config):
     # Setting up device to run on GPU to train faster
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device {device}")
-
-    # Creating model directory to store weights
-    Path(config['model_folder']).mkdir(parents=True, exist_ok=True)
 
     # Retrieving dataloaders and tokenizers for source and target languages using the 'get_ds' function
     train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
@@ -369,9 +366,6 @@ def train_model(config):
     print(f"SOS token id: {tokenizer_tgt.token_to_id('[SOS]')}, EOS token id: {tokenizer_tgt.token_to_id('[EOS]')}, PAD token id: {tokenizer_tgt.token_to_id('[PAD]')}, UNK token id: {tokenizer_tgt.token_to_id('[UNK]')}")
     print('*'*80)
     model = get_model(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, dim_embedding, Nx, h, dropout, d_ff).to(device)
-
-    # Tensorboard
-    # writer = SummaryWriter(config['experiment_name'])
 
     # Setting up the Adam optimizer with the specified learning rate from the '
     # config' dictionary plus an epsilon value

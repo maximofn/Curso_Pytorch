@@ -267,19 +267,11 @@ class MiTransformer(nn.Module):
         self.positional_encoding = MiPositionalEncoding(tgt_max_seq_len, dim_embedding)
         self.linear = Linear_and_softmax(dim_embedding, tgt_vocab_size)
     
-    def transformer_encoder(self, source):
-        encoder_output = self.transformerEncoder(source)
-        return encoder_output
-    
     def encode(self, source):
         embedding = self.embedding(source)
         positional_encoding = self.positional_encoding(embedding)
         encoder_output = self.encoder(positional_encoding)
         return encoder_output
-    
-    def transformer_decoder(self, target, encoder_output, target_mask):
-        decoder_output = self.transformerDecoder(target, encoder_output, target_mask)
-        return decoder_output
     
     def decode(self, target, encoder_output, target_mask):
         embedding = self.embedding(target)
@@ -293,32 +285,6 @@ class MiTransformer(nn.Module):
         return linear_output
     
     def forward(self, source, target, mask=None):
-        # encoder_output = self.transformerEncoder(source)
-        encoder_output = self.encoder(source)
-        # decoder_output = self.transformerDecoder(target, encoder_output, mask)
-        decoder_output = self.decoder(target, encoder_output, mask)
-        linear_output = self.linear(decoder_output)
-        return linear_output
-
-class LegoTransformer(nn.Module):
-    def __init__(self, encoder: MiEncoder, decoder: MiDecoder, src_embed: MiEmbedding, tgt_embed: MiEmbedding, src_pos: MiPositionalEncoding, tgt_pos: MiPositionalEncoding, linear_and_softmax: Linear_and_softmax) -> None:
-        super().__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-        self.src_embed = src_embed
-        self.tgt_embed = tgt_embed
-        self.src_pos = src_pos
-        self.tgt_pos = tgt_pos
-        self.linear_and_softmax = linear_and_softmax
-    
-    def encode(self, source):
-        embedding = self.src_embed(source)
-        positional_encoding = self.src_pos(embedding)
-        encoder_output = self.encoder(positional_encoding)
-        return encoder_output
-    
-    def decode(self, target, encoder_output, target_mask):
-        embedding = self.tgt_embed(target)
-        positional_encoding = self.tgt_pos(embedding)
-        decoder_output = self.decoder(positional_encoding, encoder_output, target_mask)
+        encoder_output = self.transformerEncoder(source)
+        decoder_output = self.transformerDecoder(target, encoder_output, mask)
         return decoder_output

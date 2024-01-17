@@ -282,13 +282,10 @@ def train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, ba
         # Loading input data and masks onto the GPU
         input_to_encoder_tokeniced = batch['input_to_encoder_tokeniced'].to(device)
         input_to_decoder_tokeniced = batch['input_to_decoder_tokeniced'].to(device)
-        encoder_mask = batch['encoder_mask'].to(device)
         decoder_mask = batch['decoder_mask'].to(device)
 
         # Running tensors through the Transformer
-        encoder_output = model.encode(input_to_encoder_tokeniced)
-        decoder_output = model.decode(input_to_decoder_tokeniced, encoder_output, decoder_mask)
-        proj_output = model.linear_and_softmax(decoder_output)
+        proj_output = model(input_to_encoder_tokeniced, input_to_decoder_tokeniced, decoder_mask)
         
         # Loading the target labels onto the GPU
         label = batch['target_to_decoder_tokeniced'].to(device)
@@ -298,9 +295,6 @@ def train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, ba
 
         # Updating progress bar
         batch_iterator.set_postfix({f"loss": f"{loss.item():6.3f}"})
-
-        # writer.add_scalar('train loss', loss.item(), global_step)
-        # writer.flush()
 
         # Performing backpropagation
         loss.backward()
@@ -397,7 +391,6 @@ def train_model(config):
     print(f"Nx: {Nx}, h: {h}, dropout: {dropout}, d_ff: {d_ff}")
     print(f"SOS token id: {tokenizer_tgt.token_to_id('[SOS]')}, EOS token id: {tokenizer_tgt.token_to_id('[EOS]')}, PAD token id: {tokenizer_tgt.token_to_id('[PAD]')}, UNK token id: {tokenizer_tgt.token_to_id('[UNK]')}")
     print('*'*80)
-    # model = get_model(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, dim_embedding, Nx, h, dropout, d_ff).to(device)
     model = MiTransformer(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, dim_embedding, Nx, h, dropout, d_ff).to(device)
 
     # Setting up the Adam optimizer with the specified learning rate from the '

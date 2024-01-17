@@ -246,10 +246,13 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
     eos_idx = tokenizer_tgt.token_to_id('[EOS]')
 
     # Computing the output of the encoder for the source sequence
-    if MI_ENCODER:
-        encoder_output = model.encode(source, source_mask)
+    if MI_TRANSFORMER:
+        encoder_output = model.encode(source)
     else:
-        encoder_output = model.encode(source, source_mask)
+        if MI_ENCODER:
+            encoder_output = model.encode(source, source_mask)
+        else:
+            encoder_output = model.encode(source, source_mask)
     if debug: print('*'*80)
     if debug: print(f"encoder_output shape: {encoder_output.shape} (1, max_seq_len, dim_embedding) = (1, 350, 512)") # (1, max_seq_len, dim_embedding) = (1, 350, 512)
     # Initializing the decoder input with the Start of Sentence token
@@ -264,17 +267,23 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
         decoder_mask = casual_mask(decoder_input.size(1)).type_as(source_mask).to(device)
 
         # Calculating the output of the decoder
-        if MI_DECODER:
-            out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+        if MI_TRANSFORMER:
+            out = model.decode(decoder_input, encoder_output, decoder_mask)
         else:
-            out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+            if MI_DECODER:
+                out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+            else:
+                out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
         if debug: print(f"\tout shape: {out.shape} (1, seq_len, dim_embedding) = (1, seq_len, 512)") # (1, seq_len, dim_embedding) = (1, seq_len, 512)
 
         # Applying the projection layer to get the probabilities for the next token
-        if MI_PROJECTION:
-            prob = model.project(out[:, -1])
+        if MI_TRANSFORMER:
+            prob = model.linear_and_softmax(out[:, -1])
         else:
-            prob = model.project(out[:, -1])
+            if MI_PROJECTION:
+                prob = model.project(out[:, -1])
+            else:
+                prob = model.project(out[:, -1])
         if debug: print(f"\tprob shape: {prob.shape} (1, target_vocab_size)") # (1, target_vocab_size)
         if debug: print('*'*80)
 

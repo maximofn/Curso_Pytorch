@@ -235,14 +235,14 @@ class TransformerDecoder(nn.Module):
         self.positional_encoding = MiPositionalEncoding(max_sequence_len, dim_embedding)
         self.decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
         self.linear = Linear(dim_embedding, vocab_size)
-        self.softmax = Softmax()
+        # self.softmax = Softmax()
     
     def forward(self, x, encoder_output, mask=None):
         x = self.embedding(x)
         x = self.positional_encoding(x)
         x = self.decoder(x, encoder_output, mask)
         x = self.linear(x)
-        x = self.softmax(x)
+        # x = self.softmax(x)
         return x
 
 class Linear_and_softmax(nn.Module):
@@ -265,8 +265,7 @@ class MiTransformer(nn.Module):
         self.decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
         self.embedding = MiEmbedding(tgt_vocab_size, dim_embedding)
         self.positional_encoding = MiPositionalEncoding(tgt_max_seq_len, dim_embedding)
-        self.linear = Linear(dim_embedding, tgt_vocab_size)
-        self.softmax = Softmax()
+        self.linear = Linear_and_softmax(dim_embedding, tgt_vocab_size)
     
     def transformer_encoder(self, source):
         encoder_output = self.transformerEncoder(source)
@@ -290,13 +289,16 @@ class MiTransformer(nn.Module):
     
     def linear_and_softmax(self, decoder_output):
         linear_output = self.linear(decoder_output)
-        softmax_output = self.softmax(linear_output)
-        return softmax_output
+        # softmax_output = self.softmax(linear_output)
+        return linear_output
     
     def forward(self, source, target, mask=None):
+        # encoder_output = self.transformerEncoder(source)
         encoder_output = self.encoder(source)
+        # decoder_output = self.transformerDecoder(target, encoder_output, mask)
         decoder_output = self.decoder(target, encoder_output, mask)
-        return decoder_output
+        linear_output = self.linear(decoder_output)
+        return linear_output
 
 class LegoTransformer(nn.Module):
     def __init__(self, encoder: MiEncoder, decoder: MiDecoder, src_embed: MiEmbedding, tgt_embed: MiEmbedding, src_pos: MiPositionalEncoding, tgt_pos: MiPositionalEncoding, linear_and_softmax: Linear_and_softmax) -> None:

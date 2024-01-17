@@ -9,7 +9,7 @@ import math
 
 from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax, MiEmbedding, MiPositionalEncoding
 
-MI_TRANSFORMER = False
+MI_TRANSFORMER = True
 MI_EMBEDDINGS = True
 MI_POSITIONAL_ENCODING = True
 MI_ENCODER = True

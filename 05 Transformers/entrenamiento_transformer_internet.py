@@ -26,7 +26,7 @@ from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax,
 
 SUBSET = True
 SUBSET_ONE_SAMPLE = False
-PERCENT_SUBSET = 0.01
+PERCENT_SUBSET = 0.5
 LEN_SUBSET_ONE_SAMPLE = 1
 
 MI_TRANSFORMER = False
@@ -53,7 +53,7 @@ if SUBSET:
     elif MI_PROJECTION:
         BS = 24
     else:
-        BS = 20
+        BS = 16
     if SUBSET_ONE_SAMPLE:
         BS = 1
 else:

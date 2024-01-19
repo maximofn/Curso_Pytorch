@@ -24,8 +24,15 @@ from tqdm import tqdm
 # Importing library of warnings
 import warnings
 
+# Transformer library
 from transformer_internet import *
 from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax, MiEmbedding, MiPositionalEncoding
+
+# Validation metrics
+import nltk
+from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.meteor_score import meteor_score
+from rouge import Rouge
 
 SUBSET = False
 SUBSET_ONE_SAMPLE = False
@@ -104,6 +111,13 @@ def get_ds(config):
     # Loading the train portion of the OpusBooks dataset.
     # The Language pairs will be defined in the 'config' dictionary we will build later
     ds_raw = load_dataset('opus_books', f'{config["lang_src"]}-{config["lang_tgt"]}', split = 'train') 
+
+    if SUBSET:
+      if SUBSET_ONE_SAMPLE:
+            ds_raw = ds_raw.select(range(LEN_SUBSET_ONE_SAMPLE))
+      else:
+            ds_raw = ds_raw.select(range(int(PERCENT_SUBSET*len(ds_raw))))
+    print(f'Number of examples in the dataset: {len(ds_raw)}')
     
     # Building or loading tokenizer for both the source and target languages 
     tokenizer_src = build_tokenizer(config, ds_raw, config['lang_src'])
@@ -421,12 +435,22 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
             source_text = batch['src_text'][0]
             target_text = batch['tgt_text'][0] # True translation 
             model_out_text = tokenizer_tgt.decode(model_out.detach().cpu().numpy()) # Decoded, human-readable model output
-            
+
+            # Calculating metrics
+            bleu_references = [target_text.split()] # List of references (there is only one reference in this case)
+            bleu_hypothesis = model_out_text.split() # List of tokens from the model's output
+            bleu_score = sentence_bleu(bleu_references, bleu_hypothesis) # Computing BLEU score
+            meteor_score_value = meteor_score(bleu_references, bleu_hypothesis) # Computing METEOR score
+            # rouge_score = rouge.get_scores(model_out_text, target_text, avg=True) # Computing ROUGE score
+
             # Printing results
             print_msg('-'*console_width)
             print_msg(f'SOURCE: {source_text}')
             print_msg(f'TARGET: {target_text}')
             print_msg(f'PREDICTED: {model_out_text}')
+            print_msg(f'BLEU: {bleu_score:.7f}')
+            print_msg(f'METEOR: {meteor_score_value:.7f}')
+            # print_msg(f'ROUGE: {rouge_score:.7f}')
             
             # After two examples, we break the loop
             if count == num_examples:
@@ -501,6 +525,7 @@ def train_model(config):
         
         # Initializing an iterator over the training dataloader
         # We also use tqdm to display a progress bar
+        print()
         batch_iterator = tqdm(train_dataloader, desc = f'Processing epoch {epoch:02d}')
         
         # For each batch...

@@ -151,7 +151,7 @@ def get_ds(config):
     # Creating dataloaders for the training and validadion sets
     # Dataloaders are used to iterate over the dataset in batches during training and validation
     train_dataloader = DataLoader(train_ds, batch_size = config['batch_size'], shuffle = True) # Batch size will be defined in the config dictionary
-    val_dataloader = DataLoader(val_ds, batch_size = 1, shuffle = True)
+    val_dataloader = DataLoader(val_ds, batch_size = config['batch_size'], shuffle = True)
     
     return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt, max_sec_len # Returning the DataLoader objects and tokenizers
 
@@ -417,44 +417,54 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, 
     count = 0 # Initializing counter to keep track of how many examples have been processed
     
     console_width = 80 # Fixed witdh for printed messages
+
+    progress_bar = tqdm(validation_ds, desc = 'Processing validation examples') # Initializing progress bar
+
+    bleu_scores = []
+    meteor_scores = []
     
     # Creating evaluation loop
     with torch.no_grad(): # Ensuring that no gradients are computed during this process
         for batch in validation_ds:
-            count += 1
             encoder_input = batch['encoder_input'].to(device)
             encoder_mask = batch['encoder_mask'].to(device)
             
-            # Ensuring that the batch_size of the validation set is 1
-            assert encoder_input.size(0) ==  1, 'Batch size must be 1 for validation.'
-            
+            # Get BS
+            bs = encoder_input.size(0)
+
             # Applying the 'greedy_decode' function to get the model's output for the source text of the input batch
-            model_out = greedy_decode(model, encoder_input, encoder_mask, tokenizer_src, tokenizer_tgt, max_len, device)
             
             # Retrieving source and target texts from the batch
-            source_text = batch['src_text'][0]
-            target_text = batch['tgt_text'][0] # True translation 
-            model_out_text = tokenizer_tgt.decode(model_out.detach().cpu().numpy()) # Decoded, human-readable model output
+            for i in range(bs):
+                source_text = batch['src_text'][i]
+                target_text = batch['tgt_text'][i]
+                model_out = greedy_decode(model, encoder_input[i], encoder_mask[i], tokenizer_src, tokenizer_tgt, max_len, device)
+                model_out_text = tokenizer_tgt.decode(model_out.detach().cpu().numpy())
 
-            # Calculating metrics
-            bleu_references = [target_text.split()] # List of references (there is only one reference in this case)
-            bleu_hypothesis = model_out_text.split() # List of tokens from the model's output
-            bleu_score = sentence_bleu(bleu_references, bleu_hypothesis) # Computing BLEU score
-            meteor_score_value = meteor_score(bleu_references, bleu_hypothesis) # Computing METEOR score
-            # rouge_score = rouge.get_scores(model_out_text, target_text, avg=True) # Computing ROUGE score
+                # Calculating metrics
+                bleu_references = [target_text.split()] # List of references (there is only one reference in this case)
+                bleu_hypothesis = model_out_text.split() # List of tokens from the model's output
+                bleu_score = sentence_bleu(bleu_references, bleu_hypothesis) # Computing BLEU score
+                meteor_score_value = meteor_score(bleu_references, bleu_hypothesis) # Computing METEOR score
 
-            # Printing results
-            print_msg('-'*console_width)
-            print_msg(f'SOURCE: {source_text}')
-            print_msg(f'TARGET: {target_text}')
-            print_msg(f'PREDICTED: {model_out_text}')
-            print_msg(f'BLEU: {bleu_score:.7f}')
-            print_msg(f'METEOR: {meteor_score_value:.7f}')
-            # print_msg(f'ROUGE: {rouge_score:.7f}')
+                count += 1 # Updating counter
             
-            # After two examples, we break the loop
-            if count == num_examples:
-                break
+            # Appending scores to lists
+            bleu_scores.append(bleu_score)
+            meteor_scores.append(meteor_score_value)
+
+            progress_bar.update(1)
+        
+    mean_bleu_score = sum(bleu_scores)/len(bleu_scores) # Calculating mean BLEU score
+    mean_meteor_score = sum(meteor_scores)/len(meteor_scores) # Calculating mean METEOR score
+
+    # Printing results
+    print('-'*console_width)
+    print(f'SOURCE: {source_text}')
+    print(f'TARGET: {target_text}')
+    print(f'PREDICTED: {model_out_text}')
+    print(f'BLEU: {mean_bleu_score:.9f}')
+    print(f'METEOR: {mean_meteor_score:.9f}')
 
 def debug_one_sample_of_dataloder(train_dataloader):
     sample_batch = next(iter(train_dataloader))
@@ -568,7 +578,6 @@ def train_model(config):
             
         # We run the 'run_validation' function at the end of each epoch
         # to evaluate model performance
-        print(f"config['seq_len']: {config['seq_len']}")
         run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg))
          
         # Saving model

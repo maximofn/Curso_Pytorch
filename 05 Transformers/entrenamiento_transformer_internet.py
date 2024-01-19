@@ -27,9 +27,9 @@ import warnings
 from transformer_internet import *
 from transformer import MiTransformer, MiEncoder, MiDecoder, Linear_and_softmax, MiEmbedding, MiPositionalEncoding
 
-SUBSET = True
+SUBSET = False
 SUBSET_ONE_SAMPLE = False
-PERCENT_SUBSET = 0.5
+PERCENT_SUBSET = 0.1
 LEN_SUBSET_ONE_SAMPLE = 1
 
 MI_TRANSFORMER = False
@@ -386,7 +386,7 @@ def train_loop(model, loss_fn, optimizer, tokenizer_tgt, device, global_step, ba
 
     return global_step, model, optimizer
 
-def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, global_state, writer, num_examples=2):
+def run_validation(model, validation_ds, tokenizer_src, tokenizer_tgt, max_len, device, print_msg, num_examples=2):
     model.eval() # Setting model to evaluation mode
     count = 0 # Initializing counter to keep track of how many examples have been processed
     
@@ -531,7 +531,7 @@ def train_model(config):
             
         # We run the 'run_validation' function at the end of each epoch
         # to evaluate model performance
-        run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step, writer)
+        run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg))
          
         # Saving model
         model_filename = get_weights_file_path(config, f'{epoch:02d}')

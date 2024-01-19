@@ -8,16 +8,18 @@ import torch.nn as nn
 import math
 
 class InputEmbeddings(nn.Module):
+    
     def __init__(self, d_model: int, vocab_size: int):
         super().__init__()
         self.d_model = d_model # Dimension of vectors (512)
         self.vocab_size = vocab_size # Size of the vocabulary
         self.embedding = nn.Embedding(vocab_size, d_model) # PyTorch layer that converts integer indices to dense embeddings
-
+        
     def forward(self, x):
         return self.embedding(x) * math.sqrt(self.d_model) # Normalizing the variance of the embeddings
 
 class PositionalEncoding(nn.Module):
+    
     def __init__(self, d_model: int, seq_len: int, dropout: float) -> None:
         super().__init__()
         self.d_model = d_model # Dimensionality of the model
@@ -50,6 +52,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x) # Dropout for regularization
 
 class LayerNormalization(nn.Module):
+    
     def __init__(self, eps: float = 10**-6) -> None: # We define epsilon as 0.000001 to avoid division by zero
         super().__init__()
         self.eps = eps
@@ -68,6 +71,7 @@ class LayerNormalization(nn.Module):
         return self.alpha * (x-mean) / (std + self.eps) + self.bias
 
 class FeedForwardBlock(nn.Module):
+    
     def __init__(self, d_model: int, d_ff: int, dropout: float) -> None:
         super().__init__()
         # First linear transformation
@@ -81,6 +85,7 @@ class FeedForwardBlock(nn.Module):
         return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
 
 class MultiHeadAttentionBlock(nn.Module):
+    
     def __init__(self, d_model: int, h: int, dropout: float) -> None: # h = number of heads
         super().__init__()
         self.d_model = d_model
@@ -150,6 +155,7 @@ class ResidualConnection(nn.Module):
         return x + self.dropout(sublayer(self.norm(x)))
 
 class EncoderBlock(nn.Module):
+    
     # This block takes in the MultiHeadAttentionBlock and FeedForwardBlock, as well as the dropout rate for the residual connections
     def __init__(self, self_attention_block: MultiHeadAttentionBlock, feed_forward_block: FeedForwardBlock, dropout: float) -> None:
         super().__init__()
@@ -167,6 +173,7 @@ class EncoderBlock(nn.Module):
         return x # Output tensor after applying self-attention and feed-forward layers with residual connections.
 
 class Encoder(nn.Module):
+    
     # The Encoder takes in instances of 'EncoderBlock'
     def __init__(self, layers: nn.ModuleList) -> None:
         super().__init__()
@@ -259,5 +266,4 @@ class Transformer(nn.Module):
     # Applying Projection Layer with the Softmax function to the Decoder output
     def project(self, x):
         return self.projection_layer(x)
-        
 

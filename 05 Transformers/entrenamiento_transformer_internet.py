@@ -114,10 +114,6 @@ def get_ds(config):
     val_ds_size = len(ds_raw) - train_ds_size # 10% for validation
     train_ds_raw, val_ds_raw = random_split(ds_raw, [train_ds_size, val_ds_size]) # Randomly splitting the dataset
                                     
-    # Processing data with the BilingualDataset class, which we will define below
-    train_ds = BilingualDataset(train_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
-    val_ds = BilingualDataset(val_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], config['seq_len'])
-                                    
     # Iterating over the entire dataset and printing the maximum length found in the sentences of both the source and target languages
     max_len_src = 0
     max_len_tgt = 0
@@ -126,16 +122,24 @@ def get_ds(config):
         tgt_ids = tokenizer_src.encode(pair['translation'][config['lang_tgt']]).ids
         max_len_src = max(max_len_src, len(src_ids))
         max_len_tgt = max(max_len_tgt, len(tgt_ids))
+    max_sec_len = max(max_len_src, max_len_tgt)
+    max_sec_len = max_sec_len + 2 # Adding 2 to account for the '[SOS]' and '[EOS]' tokens
+    config['seq_len'] = max_sec_len # Adding the maximum length to the config dictionary
         
     print(f'Max length of source sentence: {max_len_src}')
     print(f'Max length of target sentence: {max_len_tgt}')
+    print(f'Maximum sequence length: {max_sec_len}')
+                                    
+    # Processing data with the BilingualDataset class, which we will define below
+    train_ds = BilingualDataset(train_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], max_sec_len)
+    val_ds = BilingualDataset(val_ds_raw, tokenizer_src, tokenizer_tgt, config['lang_src'], config['lang_tgt'], max_sec_len)
     
     # Creating dataloaders for the training and validadion sets
     # Dataloaders are used to iterate over the dataset in batches during training and validation
     train_dataloader = DataLoader(train_ds, batch_size = config['batch_size'], shuffle = True) # Batch size will be defined in the config dictionary
     val_dataloader = DataLoader(val_ds, batch_size = 1, shuffle = True)
     
-    return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt # Returning the DataLoader objects and tokenizers
+    return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt, max_sec_len # Returning the DataLoader objects and tokenizers
 
 def casual_mask(size):
         # Creating a square matrix of dimensions 'size x size' filled with ones
@@ -280,11 +284,11 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
             
     return transformer # Assembled and initialized Transformer. Ready to be trained and validated!
     
-def get_model(config, vocab_src_len, vocab_tgt_len):
+def get_model(config, vocab_src_len, vocab_tgt_len, max_sec_len):
     
     # Loading model using the 'build_transformer' function.
     # We will use the lengths of the source language and target language vocabularies, the 'seq_len', and the dimensionality of the embeddings
-    model = build_transformer(vocab_src_len, vocab_tgt_len, config['seq_len'], config['seq_len'], config['d_model'])
+    model = build_transformer(vocab_src_len, vocab_tgt_len, max_sec_len, max_sec_len, config['d_model'])
     return model
 
 def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_len, device):
@@ -446,10 +450,10 @@ def train_model(config):
     Path(config['model_folder']).mkdir(parents=True, exist_ok=True)
     
     # Retrieving dataloaders and tokenizers for source and target languages using the 'get_ds' function
-    train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
+    train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt, max_sec_len = get_ds(config)
     
     # Initializing model on the GPU using the 'get_model' function
-    model = get_model(config,tokenizer_src.get_vocab_size(), tokenizer_tgt.get_vocab_size()).to(device)
+    model = get_model(config, tokenizer_src.get_vocab_size(), tokenizer_tgt.get_vocab_size(), max_sec_len).to(device)
     
     # Tensorboard
     # writer = SummaryWriter(config['experiment_name'])
@@ -531,6 +535,7 @@ def train_model(config):
             
         # We run the 'run_validation' function at the end of each epoch
         # to evaluate model performance
+        print(f"config['seq_len']: {config['seq_len']}")
         run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config['seq_len'], device, lambda msg: batch_iterator.write(msg))
          
         # Saving model

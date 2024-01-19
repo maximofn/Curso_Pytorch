@@ -60,7 +60,7 @@ if SUBSET:
     if SUBSET_ONE_SAMPLE:
         BS = 1
 else:
-    BS = 16
+    BS = 20
 print(f"BS: {BS}")
 
 SOURCE_LANGUAGE = 'en'

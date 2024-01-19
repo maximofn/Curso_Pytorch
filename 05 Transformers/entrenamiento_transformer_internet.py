@@ -33,7 +33,7 @@ PERCENT_SUBSET = 0.1
 LEN_SUBSET_ONE_SAMPLE = 1
 
 MI_TRANSFORMER = False
-MI_EMBEDDINGS = False
+MI_EMBEDDINGS = True
 MI_POSITIONAL_ENCODING = False
 MI_ENCODER = False
 MI_DECODER = False
@@ -239,8 +239,12 @@ class BilingualDataset(Dataset):
 def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048) -> Transformer:
     
     # Creating Embedding layers
-    src_embed = InputEmbeddings(d_model, src_vocab_size) # Source language (Source Vocabulary to 512-dimensional vectors)
-    tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)
+    if MI_EMBEDDINGS:
+        src_embed = MiEmbedding(src_vocab_size, d_model)
+        tgt_embed = MiEmbedding(tgt_vocab_size, d_model)
+    else:
+        src_embed = InputEmbeddings(d_model, src_vocab_size) # Source language (Source Vocabulary to 512-dimensional vectors)
+        tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)
     
     # Creating Positional Encoding layers
     src_pos = PositionalEncoding(d_model, src_seq_len, dropout) # Positional encoding for the source language embeddings

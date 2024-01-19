@@ -247,8 +247,12 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
         tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)
     
     # Creating Positional Encoding layers
-    src_pos = PositionalEncoding(d_model, src_seq_len, dropout) # Positional encoding for the source language embeddings
-    tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout) # Positional encoding for the target language embeddings
+    if MI_POSITIONAL_ENCODING:
+        src_pos = MiPositionalEncoding(max_sequence_len=src_seq_len, embedding_model_dim=d_model)
+        tgt_pos = MiPositionalEncoding(max_sequence_len=tgt_seq_len, embedding_model_dim=d_model)
+    else:
+        src_pos = PositionalEncoding(d_model, src_seq_len, dropout) # Positional encoding for the source language embeddings
+        tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout) # Positional encoding for the target language embeddings
     
     # Creating EncoderBlocks
     encoder_blocks = [] # Initial list of empty EncoderBlocks

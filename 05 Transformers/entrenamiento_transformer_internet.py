@@ -33,7 +33,7 @@ PERCENT_SUBSET = 0.5
 LEN_SUBSET_ONE_SAMPLE = 1
 
 MI_TRANSFORMER = False
-MI_EMBEDDINGS = True
+MI_EMBEDDINGS = False
 MI_POSITIONAL_ENCODING = False
 MI_ENCODER = False
 MI_DECODER = False
@@ -61,11 +61,14 @@ if SUBSET:
         BS = 1
 else:
     BS = 16
+print(f"BS: {BS}")
 
 SOURCE_LANGUAGE = 'en'
-TARGET_LANGUAGE = 'es'
+TARGET_LANGUAGE_ES = 'es'
+TARGET_LANGUAGE_IT = 'it'
+TARGET_LANGUAGE = TARGET_LANGUAGE_IT
 EPOCHS = 200
-LR = 10**-6
+LR = 10**-4
 MAX_SECUENCE_LEN = 350
 DIM_EMBEDDING = 512
 
@@ -320,13 +323,13 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
 
 def get_config():
     return{
-        'batch_size': 8,
-        'num_epochs': 20,
-        'lr': 10**-4,
-        'seq_len': 350,
-        'd_model': 512, # Dimensions of the embeddings in the Transformer. 512 like in the "Attention Is All You Need" paper.
-        'lang_src': 'en',
-        'lang_tgt': 'it',
+        'batch_size': BS,
+        'num_epochs': EPOCHS,
+        'lr': LR,
+        'seq_len': MAX_SECUENCE_LEN,
+        'd_model': DIM_EMBEDDING,
+        'lang_src': SOURCE_LANGUAGE,
+        'lang_tgt': TARGET_LANGUAGE,
         'model_folder': 'weights',
         'model_basename': 'tmodel_',
         'preload': None,

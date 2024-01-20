@@ -60,6 +60,11 @@ if SUBSET:
         BS = 1
 else:
     BS = 20
+print(f"MI_EMBEDDINGS: {MI_EMBEDDINGS}")
+print(f"MI_POSITIONAL_ENCODING: {MI_POSITIONAL_ENCODING}")
+print(f"MI_ENCODER: {MI_ENCODER}")
+print(f"MI_DECODER: {MI_DECODER}")
+print(f"MI_PROJECTION: {MI_PROJECTION}")
 print(f"BS: {BS}")
 
 SOURCE_LANGUAGE = 'en'

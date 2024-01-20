@@ -272,22 +272,26 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
             encoder_blocks.append(encoder_block) # Appending EncoderBlock to the list of EncoderBlocks
         
     # Creating DecoderBlocks
-    decoder_blocks = [] # Initial list of empty DecoderBlocks
-    for _ in range(N): # Iterating 'N' times to create 'N' DecoderBlocks (N = 6)
-        decoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Self-Attention
-        decoder_cross_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Cross-Attention
-        feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout) # FeedForward
-        
-        # Combining layers into a DecoderBlock
-        decoder_block = DecoderBlock(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, dropout)
-        decoder_blocks.append(decoder_block) # Appending DecoderBlock to the list of DecoderBlocks
+    if not MI_DECODER:
+        decoder_blocks = [] # Initial list of empty DecoderBlocks
+        for _ in range(N): # Iterating 'N' times to create 'N' DecoderBlocks (N = 6)
+            decoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Self-Attention
+            decoder_cross_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Cross-Attention
+            feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout) # FeedForward
+            
+            # Combining layers into a DecoderBlock
+            decoder_block = DecoderBlock(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, dropout)
+            decoder_blocks.append(decoder_block) # Appending DecoderBlock to the list of DecoderBlocks
         
     # Creating the Encoder and Decoder by using the EncoderBlocks and DecoderBlocks lists
     if MI_ENCODER:
         encoder = MiEncoder(h, d_model, N, dropout)
     else:
         encoder = Encoder(nn.ModuleList(encoder_blocks))
-    decoder = Decoder(nn.ModuleList(decoder_blocks))
+    if MI_DECODER:
+        decoder = MiDecoder(h, d_model, N, dropout)
+    else:
+        decoder = Decoder(nn.ModuleList(decoder_blocks))
     
     # Creating projection layer
     projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space

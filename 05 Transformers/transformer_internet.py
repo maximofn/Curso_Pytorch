@@ -272,7 +272,10 @@ class Transformer(nn.Module):
         
         # Returning the target embeddings, the output of the encoder, and both source and target masks
         # The target mask ensures that the model won't 'see' future elements of the sequence
-        return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
+        if MI_DECODER:
+            return self.decoder(tgt, encoder_output, tgt_mask)
+        else:
+            return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
     
     # Applying Projection Layer with the Softmax function to the Decoder output
     def project(self, x):

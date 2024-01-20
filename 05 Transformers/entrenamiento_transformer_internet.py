@@ -39,14 +39,6 @@ SUBSET_ONE_SAMPLE = False
 PERCENT_SUBSET = 0.1
 LEN_SUBSET_ONE_SAMPLE = 1
 
-MI_TRANSFORMER = False
-MI_EMBEDDINGS = True
-MI_POSITIONAL_ENCODING = True
-MI_ENCODER = False
-MI_DECODER = False
-MI_PROJECTION = False
-DOS_TRANSFORMERS = False
-
 if SUBSET:
     if MI_ENCODER and MI_DECODER and MI_PROJECTION:
         BS = 40
@@ -269,14 +261,15 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
         tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout) # Positional encoding for the target language embeddings
     
     # Creating EncoderBlocks
-    encoder_blocks = [] # Initial list of empty EncoderBlocks
-    for _ in range(N): # Iterating 'N' times to create 'N' EncoderBlocks (N = 6)
-        encoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Self-Attention
-        feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout) # FeedForward
-        
-        # Combine layers into an EncoderBlock
-        encoder_block = EncoderBlock(encoder_self_attention_block, feed_forward_block, dropout)
-        encoder_blocks.append(encoder_block) # Appending EncoderBlock to the list of EncoderBlocks
+    if not MI_ENCODER:
+        encoder_blocks = [] # Initial list of empty EncoderBlocks
+        for _ in range(N): # Iterating 'N' times to create 'N' EncoderBlocks (N = 6)
+            encoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Self-Attention
+            feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout) # FeedForward
+            
+            # Combine layers into an EncoderBlock
+            encoder_block = EncoderBlock(encoder_self_attention_block, feed_forward_block, dropout)
+            encoder_blocks.append(encoder_block) # Appending EncoderBlock to the list of EncoderBlocks
         
     # Creating DecoderBlocks
     decoder_blocks = [] # Initial list of empty DecoderBlocks
@@ -290,7 +283,10 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
         decoder_blocks.append(decoder_block) # Appending DecoderBlock to the list of DecoderBlocks
         
     # Creating the Encoder and Decoder by using the EncoderBlocks and DecoderBlocks lists
-    encoder = Encoder(nn.ModuleList(encoder_blocks))
+    if MI_ENCODER:
+        encoder = MiEncoder(h, d_model, N, dropout)
+    else:
+        encoder = Encoder(nn.ModuleList(encoder_blocks))
     decoder = Decoder(nn.ModuleList(decoder_blocks))
     
     # Creating projection layer
@@ -319,7 +315,11 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
     eos_idx = tokenizer_tgt.token_to_id('[EOS]')
     
     # Computing the output of the encoder for the source sequence
-    encoder_output = model.encode(source, source_mask)
+    if MI_ENCODER:
+        encoder_output = model.encode(source, source_mask)
+    else:
+        encoder_output = model.encode(source, source_mask)
+    
     # Initializing the decoder input with the Start of Sentence token
     decoder_input = torch.empty(1,1).fill_(sos_idx).type_as(source).to(device)
     

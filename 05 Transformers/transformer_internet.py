@@ -7,6 +7,14 @@ import torch.nn as nn
 # Math
 import math
 
+MI_TRANSFORMER = False
+MI_EMBEDDINGS = True
+MI_POSITIONAL_ENCODING = True
+MI_ENCODER = True
+MI_DECODER = False
+MI_PROJECTION = False
+DOS_TRANSFORMERS = False
+
 class InputEmbeddings(nn.Module):
     
     def __init__(self, d_model: int, vocab_size: int):
@@ -252,7 +260,10 @@ class Transformer(nn.Module):
     def encode(self, src, src_mask):
         src = self.src_embed(src) # Applying source embeddings to the input source language
         src = self.src_pos(src) # Applying source positional encoding to the source embeddings
-        return self.encoder(src, src_mask) # Returning the source embeddings plus a source mask to prevent attention to certain elements
+        if MI_ENCODER:
+            return self.encoder(src) # Returning the source embeddings plus a source mask to prevent attention to certain elements
+        else:
+            return self.encoder(src, src_mask) # Returning the source embeddings plus a source mask to prevent attention to certain elements
     
     # Decoder
     def decode(self, encoder_output, src_mask, tgt, tgt_mask):

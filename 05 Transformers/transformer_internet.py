@@ -8,10 +8,10 @@ import torch.nn as nn
 import math
 
 MI_TRANSFORMER = False
-MI_EMBEDDINGS = True
-MI_POSITIONAL_ENCODING = True
-MI_ENCODER = True
-MI_DECODER = False
+MI_EMBEDDINGS = False
+MI_POSITIONAL_ENCODING = False
+MI_ENCODER = False
+MI_DECODER = True
 MI_PROJECTION = False
 DOS_TRANSFORMERS = False
 

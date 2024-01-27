@@ -39,6 +39,7 @@ SUBSET_ONE_SAMPLE = False
 PERCENT_SUBSET = 0.1
 LEN_SUBSET_ONE_SAMPLE = 1
 
+NUM_GPU = 0
 if SUBSET:
     if MI_ENCODER and MI_DECODER and MI_PROJECTION:
         BS = 40
@@ -59,7 +60,10 @@ if SUBSET:
     if SUBSET_ONE_SAMPLE:
         BS = 1
 else:
-    BS = 20
+    if NUM_GPU == 0:
+        BS = 68
+    else:
+        BS = 20
 print(f"MI_EMBEDDINGS: {MI_EMBEDDINGS}")
 print(f"MI_POSITIONAL_ENCODING: {MI_POSITIONAL_ENCODING}")
 print(f"MI_ENCODER: {MI_ENCODER}")
@@ -510,7 +514,7 @@ def debug_one_sample_of_dataloder(train_dataloader):
 
 def train_model(config):
     # Setting up device to run on GPU to train faster
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device(f'cuda:{NUM_GPU}' if torch.cuda.is_available() else 'cpu')
     print(f"Using device {device}")
     
     # Creating model directory to store weights

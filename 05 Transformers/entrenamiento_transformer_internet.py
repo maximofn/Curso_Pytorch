@@ -304,7 +304,10 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
         decoder = Decoder(nn.ModuleList(decoder_blocks))
     
     # Creating projection layer
-    projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space
+    if MI_PROJECTION:
+        projection_layer = Linear_and_softmax(d_model, tgt_vocab_size)
+    else:
+        projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space
     
     # Creating the transformer by combining everything above
     transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection_layer)

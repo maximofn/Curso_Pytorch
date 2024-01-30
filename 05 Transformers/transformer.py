@@ -263,23 +263,25 @@ class MiTransformer(nn.Module):
         self.transformerDecoder = TransformerDecoder(heads, dim_embedding, Nx, tgt_vocab_size, tgt_max_seq_len, prob_dropout)
         self.encoder = MiEncoder(heads, dim_embedding, Nx, prob_dropout)
         self.decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
-        self.embedding = MiEmbedding(tgt_vocab_size, dim_embedding)
-        self.positional_encoding = MiPositionalEncoding(tgt_max_seq_len, dim_embedding)
+        self.sourceEmbedding = MiEmbedding(src_vocab_size, dim_embedding)
+        self.targetEmbedding = MiEmbedding(tgt_vocab_size, dim_embedding)
+        self.sourcePositional_encoding = MiPositionalEncoding(src_max_seq_len, dim_embedding)
+        self.targetPositional_encoding = MiPositionalEncoding(tgt_max_seq_len, dim_embedding)
         self.linear = Linear_and_softmax(dim_embedding, tgt_vocab_size)
     
     def encode(self, source):
-        embedding = self.embedding(source)
-        positional_encoding = self.positional_encoding(embedding)
+        embedding = self.sourceEmbedding(source)
+        positional_encoding = self.sourcePositional_encoding(embedding)
         encoder_output = self.encoder(positional_encoding)
         return encoder_output
     
-    def decode(self, target, encoder_output, target_mask):
-        embedding = self.embedding(target)
-        positional_encoding = self.positional_encoding(embedding)
+    def decode(self, encoder_output, target, target_mask):
+        embedding = self.targetEmbedding(target)
+        positional_encoding = self.targetPositional_encoding(embedding)
         decoder_output = self.decoder(positional_encoding, encoder_output, target_mask)
         return decoder_output
     
-    def linear_and_softmax(self, decoder_output):
+    def projection(self, decoder_output):
         linear_output = self.linear(decoder_output)
         # softmax_output = self.softmax(linear_output)
         return linear_output

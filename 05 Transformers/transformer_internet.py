@@ -7,14 +7,6 @@ import torch.nn as nn
 # Math
 import math
 
-MI_TRANSFORMER = False
-MI_EMBEDDINGS = True
-MI_POSITIONAL_ENCODING = True
-MI_ENCODER = True
-MI_DECODER = True
-MI_PROJECTION = True
-DOS_TRANSFORMERS = False
-
 class InputEmbeddings(nn.Module):
     
     def __init__(self, d_model: int, vocab_size: int):

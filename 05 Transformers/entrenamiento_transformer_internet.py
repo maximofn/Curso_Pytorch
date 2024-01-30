@@ -31,7 +31,6 @@ from transformer import MiTransformer
 import nltk
 from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate.meteor_score import meteor_score
-from rouge import Rouge
 
 SUBSET = False
 SUBSET_ONE_SAMPLE = False

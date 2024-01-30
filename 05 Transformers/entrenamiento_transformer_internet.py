@@ -25,7 +25,7 @@ from tqdm import tqdm
 import warnings
 
 # Transformer library
-from transformer import MiTransformer
+from transformer import Transformer
 
 # Validation metrics
 import nltk
@@ -231,9 +231,9 @@ class BilingualDataset(Dataset):
             'tgt_text': tgt_text
         }
 
-def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048) -> MiTransformer:
+def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048) -> Transformer:
     
-    transformer = MiTransformer(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, d_model, N, h, dropout)
+    transformer = Transformer(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, d_model, N, h, dropout)
     
     # Initialize the parameters
     for p in transformer.parameters():

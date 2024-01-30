@@ -22,7 +22,7 @@ class CustomEmbedding(nn.Module):
     def forward(self, x):
         return self.embedding(x)
 
-class MiEmbedding(nn.Module):
+class Embedding(nn.Module):
     def __init__(self, vocab_size, embedding_dim):
         super().__init__()
         self.vocab_size = vocab_size
@@ -33,7 +33,7 @@ class MiEmbedding(nn.Module):
     def forward(self, x):
         return self.embedding(x)
 
-class MiPositionalEncoding(nn.Module):
+class PositionalEncoding(nn.Module):
     def __init__(self, max_sequence_len, embedding_model_dim):
         super().__init__()
         self.embedding_dim = embedding_model_dim
@@ -161,7 +161,7 @@ class EncoderLayer(nn.Module):
         add_and_norm_2 = self.add_and_norm_2(add_and_norm_1, dropout2)
         return add_and_norm_2
 
-class MiEncoder(nn.Module):
+class Encoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
         self.encoder_layers = nn.ModuleList([EncoderLayer(heads, dim_embedding, prob_dropout) for _ in range(Nx)])
@@ -174,9 +174,9 @@ class MiEncoder(nn.Module):
 class TransformerEncoder(nn.Module):
     def __init__(self, vocab_size, dim_embedding, max_sequence_len, heads, Nx, prob_dropout=0.1):
         super().__init__()
-        self.input_embedding = MiEmbedding(vocab_size, dim_embedding)
-        self.positional_encoding = MiPositionalEncoding(max_sequence_len, dim_embedding)
-        self.encoder = MiEncoder(heads, dim_embedding, Nx, prob_dropout)
+        self.input_embedding = Embedding(vocab_size, dim_embedding)
+        self.positional_encoding = PositionalEncoding(max_sequence_len, dim_embedding)
+        self.encoder = Encoder(heads, dim_embedding, Nx, prob_dropout)
     
     def forward(self, x):
         input_embedding = self.input_embedding(x)
@@ -218,7 +218,7 @@ class DecoderLayer(nn.Module):
 
         return add_and_norm_3
 
-class MiDecoder(nn.Module):
+class Decoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, prob_dropout=0.1):
         super().__init__()
         self.layers = nn.ModuleList([DecoderLayer(heads, dim_embedding, prob_dropout) for _ in range(Nx)])
@@ -231,9 +231,9 @@ class MiDecoder(nn.Module):
 class TransformerDecoder(nn.Module):
     def __init__(self, heads, dim_embedding, Nx, vocab_size, max_sequence_len, prob_dropout=0.1):
         super().__init__()
-        self.embedding = MiEmbedding(vocab_size, dim_embedding)
-        self.positional_encoding = MiPositionalEncoding(max_sequence_len, dim_embedding)
-        self.decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
+        self.embedding = Embedding(vocab_size, dim_embedding)
+        self.positional_encoding = PositionalEncoding(max_sequence_len, dim_embedding)
+        self.decoder = Decoder(heads, dim_embedding, Nx, prob_dropout)
         self.linear = Linear(dim_embedding, vocab_size)
         # self.softmax = Softmax()
     
@@ -256,17 +256,17 @@ class Linear_and_softmax(nn.Module):
         # x = self.softmax(x)
         return x
 
-class MiTransformer(nn.Module):
+class Transformer(nn.Module):
     def __init__(self, src_vocab_size, tgt_vocab_size, src_max_seq_len, tgt_max_seq_len, dim_embedding, Nx, heads, prob_dropout=0.1, dim_feedforward=2048):
         super().__init__()
         self.transformerEncoder = TransformerEncoder(src_vocab_size, dim_embedding, src_max_seq_len, heads, Nx, prob_dropout)
         self.transformerDecoder = TransformerDecoder(heads, dim_embedding, Nx, tgt_vocab_size, tgt_max_seq_len, prob_dropout)
-        self.encoder = MiEncoder(heads, dim_embedding, Nx, prob_dropout)
-        self.decoder = MiDecoder(heads, dim_embedding, Nx, prob_dropout)
-        self.sourceEmbedding = MiEmbedding(src_vocab_size, dim_embedding)
-        self.targetEmbedding = MiEmbedding(tgt_vocab_size, dim_embedding)
-        self.sourcePositional_encoding = MiPositionalEncoding(src_max_seq_len, dim_embedding)
-        self.targetPositional_encoding = MiPositionalEncoding(tgt_max_seq_len, dim_embedding)
+        self.encoder = Encoder(heads, dim_embedding, Nx, prob_dropout)
+        self.decoder = Decoder(heads, dim_embedding, Nx, prob_dropout)
+        self.sourceEmbedding = Embedding(src_vocab_size, dim_embedding)
+        self.targetEmbedding = Embedding(tgt_vocab_size, dim_embedding)
+        self.sourcePositional_encoding = PositionalEncoding(src_max_seq_len, dim_embedding)
+        self.targetPositional_encoding = PositionalEncoding(tgt_max_seq_len, dim_embedding)
         self.linear = Linear_and_softmax(dim_embedding, tgt_vocab_size)
     
     def encode(self, source):

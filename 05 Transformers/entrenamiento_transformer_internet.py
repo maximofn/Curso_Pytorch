@@ -25,11 +25,7 @@ from tqdm import tqdm
 import warnings
 
 # Transformer library
-MI_TRANSFORMER = True
-if MI_TRANSFORMER:
-    from transformer import MiTransformer
-else:
-    from transformer_internet import *
+from transformer import MiTransformer
 
 # Validation metrics
 import nltk
@@ -53,7 +49,6 @@ else:
         BS = 68
     else:
         BS = 20
-print(f"MI_TRANFORMER: {MI_TRANSFORMER}")
 print(f"BS: {BS}")
 
 SOURCE_LANGUAGE = 'en'
@@ -239,53 +234,7 @@ class BilingualDataset(Dataset):
 
 def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048) -> MiTransformer:
     
-    # Creating Embedding layers
-    if not MI_TRANSFORMER:
-        src_embed = InputEmbeddings(d_model, src_vocab_size) # Source language (Source Vocabulary to 512-dimensional vectors)
-        tgt_embed = InputEmbeddings(d_model, tgt_vocab_size) # Target language (Target Vocabulary to 512-dimensional vectors)
-    
-    # Creating Positional Encoding layers
-    if not MI_TRANSFORMER:
-        src_pos = PositionalEncoding(max_sequence_len=src_seq_len, embedding_model_dim=d_model)
-        tgt_pos = PositionalEncoding(max_sequence_len=tgt_seq_len, embedding_model_dim=d_model)
-    
-    # Creating EncoderBlocks
-    if not MI_TRANSFORMER:
-        encoder_blocks = [] # Initial list of empty EncoderBlocks
-        for _ in range(N): # Iterating 'N' times to create 'N' EncoderBlocks (N = 6)
-            encoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Self-Attention
-            feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout) # FeedForward
-            
-            # Combine layers into an EncoderBlock
-            encoder_block = EncoderBlock(encoder_self_attention_block, feed_forward_block, dropout)
-            encoder_blocks.append(encoder_block) # Appending EncoderBlock to the list of EncoderBlocks
-        
-    # Creating DecoderBlocks
-    if not MI_TRANSFORMER:
-        decoder_blocks = [] # Initial list of empty DecoderBlocks
-        for _ in range(N): # Iterating 'N' times to create 'N' DecoderBlocks (N = 6)
-            decoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Self-Attention
-            decoder_cross_attention_block = MultiHeadAttentionBlock(d_model, h, dropout) # Cross-Attention
-            feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout) # FeedForward
-            
-            # Combining layers into a DecoderBlock
-            decoder_block = DecoderBlock(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, dropout)
-            decoder_blocks.append(decoder_block) # Appending DecoderBlock to the list of DecoderBlocks
-        
-    # Creating the Encoder and Decoder by using the EncoderBlocks and DecoderBlocks lists
-    if not MI_TRANSFORMER:
-        encoder = Encoder(nn.ModuleList(encoder_blocks))
-        decoder = Decoder(nn.ModuleList(decoder_blocks))
-    
-    # Creating projection layer
-    if not MI_TRANSFORMER:
-        projection_layer = ProjectionLayer(d_model, tgt_vocab_size) # Map the output of Decoder to the Target Vocabulary Space
-    
-    # Creating the transformer by combining everything above
-    if MI_TRANSFORMER:
-        transformer = MiTransformer(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, d_model, N, h, dropout)
-    else:
-        transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection_layer)
+    transformer = MiTransformer(src_vocab_size, tgt_vocab_size, src_seq_len, tgt_seq_len, d_model, N, h, dropout)
     
     # Initialize the parameters
     for p in transformer.parameters():
@@ -307,10 +256,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
     # eos_idx = tokenizer_tgt.token_to_id('[EOS]')    # End of Sentence token index (3)
 
     # Computing the output of the encoder for the source sequence
-    if MI_TRANSFORMER:
-        encoder_output = model.encode(source)
-    else:
-        encoder_output = model.encode(source, source_mask)
+    encoder_output = model.encode(source)
     
     # Initializing the decoder input with the Start of Sentence token
     decoder_input = torch.empty(bs,1).fill_(sos_idx).type_as(source).to(device)
@@ -324,16 +270,10 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
         decoder_mask = casual_mask(decoder_input.size(1)).type_as(source_mask).to(device)
         
         # Calculating the output of the decoder
-        if MI_TRANSFORMER:
-            out = model.decode(encoder_output, decoder_input, decoder_mask)
-        else:
-            out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+        out = model.decode(encoder_output, decoder_input, decoder_mask)
         
         # Applying the projection layer to get the probabilities for the next token
-        if MI_TRANSFORMER:
-            prob = model.projection(out[:, -1])
-        else:
-            prob = model.project(out[:, -1])
+        prob = model.projection(out[:, -1])
 
         # Selecting token with the highest probability
         _, next_word = torch.max(prob, dim=1)
@@ -522,14 +462,9 @@ def train_model(config):
             decoder_mask = batch['decoder_mask'].to(device)
             
             # Running tensors through the Transformer
-            if MI_TRANSFORMER:
-                encoder_output = model.encode(encoder_input)
-                decoder_output = model.decode(encoder_output, decoder_input, decoder_mask)
-                proj_output = model.projection(decoder_output)
-            else:
-                encoder_output = model.encode(encoder_input, encoder_mask)
-                decoder_output = model.decode(encoder_output, encoder_mask, decoder_input, decoder_mask)
-                proj_output = model.project(decoder_output)
+            encoder_output = model.encode(encoder_input)
+            decoder_output = model.decode(encoder_output, decoder_input, decoder_mask)
+            proj_output = model.projection(decoder_output)
             
             # Loading the target labels onto the GPU
             label = batch['label'].to(device)
